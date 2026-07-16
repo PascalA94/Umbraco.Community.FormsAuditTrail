@@ -1,0 +1,28 @@
+# .NET build output
+bin/
+obj/
+
+# EF Core design-time SQLite database (created by dotnet ef migrations add)
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend dependencies
+Client/node_modules/
+
+# Note: wwwroot/ is the built client output (vite build from Client/) and IS committed —
+# dotnet pack needs it present, and consuming the project by reference needs it at build time.
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NuGet
+*.nupkg
+*.snupkg

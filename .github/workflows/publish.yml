@@ -1,0 +1,40 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore
+        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx
+
+      - name: Build
+        run: dotnet build src/Umbraco.Community.FormsAuditTrail.slnx --no-restore -c Release
+
+      - name: Test
+        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx --no-build -c Release
+
+      - name: Pack
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          dotnet pack src/Umbraco.Community.FormsAuditTrail/Umbraco.Community.FormsAuditTrail.csproj \
+            --no-build -c Release \
+            -p:Version=$VERSION \
+            -o ./artifacts
+
+      - name: Push to NuGet
+        run: dotnet nuget push ./artifacts/*.nupkg --source https://api.nuget.org/v3/index.json

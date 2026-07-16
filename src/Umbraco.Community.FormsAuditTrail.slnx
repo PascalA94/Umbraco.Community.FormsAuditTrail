@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Umbraco.Community.FormsAuditTrail/Umbraco.Community.FormsAuditTrail.csproj" />
+  <Project Path="Umbraco.Community.FormsAuditTrail.Tests/Umbraco.Community.FormsAuditTrail.Tests.csproj" />
+</Solution>
