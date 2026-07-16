@@ -37,4 +37,9 @@ jobs:
             -o ./artifacts
 
       - name: Push to NuGet
-        run: dotnet nuget push ./artifacts/*.nupkg --source https://api.nuget.org/v3/index.json
+        run: |
+          OIDC_TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nuget.org" | jq -r '.value')
+          dotnet nuget push ./artifacts/*.nupkg \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key $OIDC_TOKEN
