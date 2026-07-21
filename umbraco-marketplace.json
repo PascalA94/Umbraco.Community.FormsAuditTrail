@@ -1,0 +1,16 @@
+{
+  "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+  "Title": "Forms Audit Trail",
+  "Description": "A view-only audit trail for Umbraco Forms design changes. Tracks who changed what on form designs — fields, pages, workflows and form settings — and surfaces the history in a backoffice dashboard with filtering, field-level diffs and CSV export.\n\nUmbraco has a content audit trail, but Forms changes have never had one. This package fills that gap.",
+  "Category": "Forms",
+  "PackageType": "Package",
+  "LicenseTypes": ["Free"],
+  "DocumentationUrl": "https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail#readme",
+  "IssueTrackerUrl": "https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/issues",
+  "LookingForContributors": true,
+  "AuthorDetails": {
+    "Name": "Pascal Meyer",
+    "Url": "https://github.com/PascalA94"
+  },
+  "Tags": ["forms", "audit", "audit-trail", "history", "backoffice", "dashboard"]
+}
