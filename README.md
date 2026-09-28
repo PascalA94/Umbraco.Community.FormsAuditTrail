@@ -6,19 +6,24 @@ Umbraco has a content audit trail, but Forms changes have never had one — this
 
 ## Compatibility
 
-| Package version | Umbraco CMS | Umbraco Forms | .NET | Database |
-|---|---|---|---|---|
-| 18.x (`main`) | 18.2+ | 18.1.3+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
-| 17.x (`v17` branch) | 17.0+ | 17.0+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| Package version | Branch | Umbraco CMS | Umbraco Forms | .NET | Database |
+|---|---|---|---|---|---|
+| 18.x | `main` | 18.2+ | 18.1.3+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| 17.x | `v17` | 17.7+ | 17.5.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| 1.0.0 | - | 17.0+ | 17.0+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
 
 ### Versioning
 
-From version 18 onwards, the package's major version matches the Umbraco major it targets: package `18.x` requires Umbraco CMS 18.2+ and Umbraco Forms 18.1.3+. Umbraco 17 users should take the `17.x` releases from the [`v17` branch](../../tree/v17), which continues to receive fixes independently of `main`. `1.0.0` was the original release, built against Umbraco 17; it predates this convention and is equivalent to `17.x`.
+The package's major version matches the Umbraco major it targets: `18.x` for Umbraco 18 (developed on `main`) and `17.x` for Umbraco 17 (maintained on the `v17` branch, which continues to receive fixes). `1.0.0` was the original Umbraco 17 release and predates this convention; Umbraco 17 sites should move to `17.x`.
 
 ## Installation
 
 ```bash
+# Umbraco 18
 dotnet add package Umbraco.Community.FormsAuditTrail
+
+# Umbraco 17 - pin a 17.x version, otherwise the latest (18.x) is selected and restore fails
+dotnet add package Umbraco.Community.FormsAuditTrail --version 17.0.1
 ```
 
 That's it. The package self-registers via an `IComposer`, creates its database tables automatically on startup, and the dashboard appears as a **Forms Audit Trail** tab in the Forms section of the backoffice.
@@ -91,12 +96,14 @@ Ideas under consideration for future versions — contributions welcome:
 
 ## Building from source
 
-The backoffice dashboard is built with Lit/TypeScript targeting the Umbraco Bellissima backoffice.
+Requires the .NET 10 SDK and Node.js 24.13+ (pinned in `Client/.nvmrc`: `nvm use` with nvm or fnm, or `nvm use 24` with nvm-windows).
+
+The backoffice dashboard is built with Lit/TypeScript targeting the Umbraco Bellissima backoffice. The built output in `wwwroot/` is committed, and CI fails a pull request if it is out of date with the client source, so rebuild and commit it whenever you change anything under `Client/`.
 
 ```bash
 # Frontend (output goes to wwwroot/, served via static web assets)
-cd Client
-npm install
+cd src/Umbraco.Community.FormsAuditTrail/Client
+npm ci
 npm run build
 
 # Package
