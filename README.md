@@ -6,12 +6,14 @@ Umbraco has a content audit trail, but Forms changes have never had one — this
 
 ## Compatibility
 
-| Dependency | Version |
-|---|---|
-| Umbraco CMS | 17.x |
-| Umbraco Forms | 17.x |
-| .NET | 10 |
-| Database | SQLite and SQL Server (including Umbraco Cloud) |
+| Package version | Umbraco CMS | Umbraco Forms | .NET | Database |
+|---|---|---|---|---|
+| 18.x (`main`) | 18.2+ | 18.1.3+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| 17.x (`v17` branch) | 17.0+ | 17.0+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+
+### Versioning
+
+From version 18 onwards, the package's major version matches the Umbraco major it targets: package `18.x` requires Umbraco CMS 18.2+ and Umbraco Forms 18.1.3+. Umbraco 17 users should take the `17.x` releases from the [`v17` branch](../../tree/v17), which continues to receive fixes independently of `main`. `1.0.0` was the original release, built against Umbraco 17; it predates this convention and is equivalent to `17.x`.
 
 ## Installation
 
@@ -76,7 +78,7 @@ Indexes are applied on `Timestamp`, `FormId`, and `UserKey` for filter performan
 ## Known limitations
 
 - **Workflow property changes** (rename, settings edits, active toggle made in the workflow dialog) are captured on the *next* form save rather than the moment they happen: Umbraco Forms commits workflows to the database before firing form notifications. Workflow additions and removals are captured correctly.
-- **Form copies** are recorded as `Created` events — Umbraco Forms 17 has no copy notification.
+- **Form copies** are recorded as `Created` events — Umbraco Forms 18 has no copy notification.
 - **Umbraco Deploy transfers** are captured but attributed to **System** rather than the user who triggered the deployment — the deploying user's identity is not available in the notification.
 
 ## Roadmap
