@@ -1,6 +1,6 @@
 {
   "name": "umbraco-community-forms-audit-trail-client",
-  "version": "17.0.0",
+  "version": "17.0.1",
   "private": true,
   "scripts": {
     "build": "tsc --noEmit && vite build",
@@ -13,5 +13,8 @@
   },
   "overrides": {
     "js-yaml": "^4.3.2"
+  },
+  "engines": {
+    "node": ">=24.13"
   }
 }
