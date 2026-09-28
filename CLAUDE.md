@@ -18,6 +18,7 @@ The package major version matches the Umbraco major it targets. Each line lives 
 - **This branch is `main` (Umbraco 18).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`.
 - Umbraco and EF Core references are **range floors**. Raising a floor forces every consuming site to upgrade, so only raise one when there is a concrete reason (a required API, a security fix) and say why in the PR.
 - A version bump touches four files, which must stay in step: the `<Version>` in `Umbraco.Community.FormsAuditTrail.csproj`, `Client/package.json`, `Client/package-lock.json` (run `npm install --package-lock-only`) and `Client/public/umbraco-package.json` (the version shown in the backoffice). Then rebuild the client.
+- A 17.x release also updates the pinned Umbraco 17 install command (`--version 17.x.y`) in `README.md` on **both** branches: `main`'s README is what GitHub shows, and each branch's README ships on its own NuGet versions.
 - NuGet audit runs in `direct` mode on purpose: transitive advisories are resolved by the consuming site. Still run `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --vulnerable --include-transitive` before a release, and raise an Umbraco floor if that is what pulls a patched version in.
 
 ## Commands
@@ -69,9 +70,10 @@ Tests are in `src/Umbraco.Community.FormsAuditTrail.Tests/`, a sibling folder, b
 
 ## Releasing
 
-1. Open a PR against `main` or `v17`. Branches are protected, and the `build` check must pass: .NET build and test, plus the client rebuild and `wwwroot` check.
-2. After merging, tag the merged commit `v<version>` (for example `v18.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
-3. Create a GitHub release: `gh release create v<version> --generate-notes`.
-4. The Umbraco Marketplace syncs from NuGet about every 2 hours. `umbraco-marketplace.json` is read from the root of `main`.
+1. Check for outdated dependencies, since only security alerts are automated (Dependabot version-update PRs are deliberately off): `npm outdated` in `Client/` and `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --outdated`. Keep Umbraco floors and `Microsoft.EntityFrameworkCore.Design` where they are unless there is a reason to move them.
+2. Open a PR against `main` or `v17`. Branches are protected, and the `build` check must pass: .NET build and test, plus the client rebuild and `wwwroot` check.
+3. After merging, tag the merged commit `v<version>` (for example `v18.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
+4. Create a GitHub release: `gh release create v<version> --generate-notes`.
+5. The Umbraco Marketplace syncs from NuGet about every 2 hours. `umbraco-marketplace.json` is read from the root of `main`.
 
 NuGet versions can be unlisted but never deleted, so treat a tag push as final.
