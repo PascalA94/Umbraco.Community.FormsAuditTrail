@@ -15,7 +15,7 @@ The package major version matches the Umbraco major it targets. Each line lives 
 | `main` | 18.x | `[18.2.0, 19.0.0)` | `[18.1.3, 19.0.0)` | `^18.2.0` |
 | `v17` | 17.x | `[17.7.0, 18.0.0)` | `[17.5.2, 18.0.0)` | `^17.7.0` |
 
-- **This branch is `v17` (Umbraco 17 maintenance).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`. Dependabot is configured from `main`, with `target-branch: v17` entries.
+- **This branch is `v17` (Umbraco 17 maintenance).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`.
 - Umbraco and EF Core references are **range floors**. Raising a floor forces every consuming site to upgrade, so only raise one when there is a concrete reason (a required API, a security fix) and say why in the PR.
 - A version bump touches four files, which must stay in step: the `<Version>` in `Umbraco.Community.FormsAuditTrail.csproj`, `Client/package.json`, `Client/package-lock.json` (run `npm install --package-lock-only`) and `Client/public/umbraco-package.json` (the version shown in the backoffice). Then rebuild the client.
 - NuGet audit runs in `direct` mode on purpose: transitive advisories are resolved by the consuming site. Still run `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --vulnerable --include-transitive` before a release, and raise an Umbraco floor if that is what pulls a patched version in.
