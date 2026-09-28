@@ -36,10 +36,15 @@ jobs:
             -p:Version=$VERSION \
             -o ./artifacts
 
+      # Trusted Publishing: exchange the GitHub OIDC token for a short-lived NuGet API key
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to NuGet
         run: |
-          OIDC_TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nuget.org" | jq -r '.value')
           dotnet nuget push ./artifacts/*.nupkg \
             --source https://api.nuget.org/v3/index.json \
-            --api-key $OIDC_TOKEN
+            --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
