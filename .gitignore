@@ -27,5 +27,5 @@ Thumbs.db
 *.nupkg
 *.snupkg
 
-# Claude Code dev context — not for public consumption
-CLAUDE.md
+# Claude Code personal context (the shared CLAUDE.md is committed)
+CLAUDE.local.md

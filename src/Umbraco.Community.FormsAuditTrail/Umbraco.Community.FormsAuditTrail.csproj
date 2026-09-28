@@ -14,7 +14,7 @@
 
   <PropertyGroup>
     <PackageId>Umbraco.Community.FormsAuditTrail</PackageId>
-    <Version>17.0.0</Version>
+    <Version>17.0.1</Version>
     <Authors>Pascal Meyer</Authors>
     <Description>A view-only audit trail for Umbraco Forms design changes. Tracks who changed what on form designs (fields, pages, workflows and form settings) and surfaces the history in a backoffice dashboard with filtering, field-level diffs and CSV export.</Description>
     <Copyright>Copyright © Pascal Meyer</Copyright>
@@ -28,6 +28,20 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
+  <!-- Debugging support: Source Link (built into the .NET SDK) plus a .snupkg symbol package,
+       which `dotnet nuget push` uploads alongside the .nupkg -->
+  <PropertyGroup>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!-- Deterministic, path-normalised builds in CI so published binaries are reproducible -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
@@ -36,6 +50,9 @@
     <PackageReference Include="Umbraco.Cms.Web.Common" Version="[17.7.0, 18.0.0)" />
     <PackageReference Include="Umbraco.Cms.Persistence.EFCore.Sqlite" Version="[17.7.0, 18.0.0)" />
     <PackageReference Include="Umbraco.Cms.Persistence.EFCore.SqlServer" Version="[17.7.0, 18.0.0)" />
+    <!-- Umbraco Forms 17 only requires Api.Management 17.5, whose Swashbuckle pulls a vulnerable Microsoft.OpenApi
+         (GHSA-v5pm-xwqc-g5wc). Raising the floor to 17.7 resolves the patched Microsoft.OpenApi 2.9.0 -->
+    <PackageReference Include="Umbraco.Cms.Api.Management" Version="[17.7.0, 18.0.0)" />
     <PackageReference Include="Umbraco.Forms.Web" Version="[17.5.2, 18.0.0)" />
     <PackageReference Include="Umbraco.Forms.Core.Providers" Version="[17.5.2, 18.0.0)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="[10.0.0, 11.0.0)">
