@@ -6,12 +6,22 @@ Umbraco has a content audit trail, but Forms changes have never had one — this
 
 ## Compatibility
 
+| Package | Umbraco CMS | Umbraco Forms |
+|---|---|---|
+| 17.x | 17.7+ | 17.5.2+ |
+
 | Dependency | Version |
 |---|---|
-| Umbraco CMS | 17.x |
-| Umbraco Forms | 17.x |
 | .NET | 10 |
 | Database | SQLite and SQL Server (including Umbraco Cloud) |
+
+### Versioning
+
+From version 17.0.0 onwards, this package's major version matches the major
+version of Umbraco it targets: the `v17` branch (package `17.x`) is the
+Umbraco 17 maintenance line, and Umbraco 18 support lives on `main` (package
+`18.x`). The original `1.0.0` release predates this scheme — it also targeted
+Umbraco 17.
 
 ## Installation
 
