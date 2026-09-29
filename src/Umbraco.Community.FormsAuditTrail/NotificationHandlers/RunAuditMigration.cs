@@ -26,7 +26,7 @@ public class RunAuditMigration : INotificationAsyncHandler<UmbracoApplicationSta
 
     public async Task HandleAsync(UmbracoApplicationStartedNotification notification, CancellationToken cancellationToken)
     {
-        // Don't attempt migrations while Umbraco is installing or upgrading — the connection
+        // Don't attempt migrations while Umbraco is installing or upgrading: the connection
         // string may not be configured yet. After install completes the application restarts
         // and this handler runs again at RuntimeLevel.Run.
         if (_runtimeState.Level != global::Umbraco.Cms.Core.RuntimeLevel.Run)
