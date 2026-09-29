@@ -10,7 +10,7 @@ obj/
 # Frontend dependencies
 Client/node_modules/
 
-# Note: wwwroot/ is the built client output (vite build from Client/) and IS committed —
+# Note: wwwroot/ is the built client output (vite build from Client/) and IS committed:
 # dotnet pack needs it present, and consuming the project by reference needs it at build time.
 
 # IDE

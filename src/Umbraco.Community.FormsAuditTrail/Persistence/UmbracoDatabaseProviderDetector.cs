@@ -4,7 +4,7 @@ internal static class UmbracoDatabaseProviderDetector
 {
     /// <summary>
     /// Decides whether the configured Umbraco database is SQLite. The provider name setting
-    /// (umbracoDbDSN_ProviderName) wins when present, but it is not always configured — some
+    /// (umbracoDbDSN_ProviderName) wins when present, but it is not always configured: some
     /// setups (e.g. Umbraco Cloud local development) expose only the connection string, so the
     /// connection string itself is sniffed as a fallback. Defaults to SQL Server when unsure.
     /// </summary>

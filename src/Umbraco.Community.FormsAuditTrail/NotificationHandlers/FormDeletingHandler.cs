@@ -37,7 +37,7 @@ public class FormDeletingHandler : INotificationHandler<FormDeletingNotification
             {
                 var beforeJson = _snapshotService.Serialize(form);
 
-                // No backoffice user means the delete came from a background process —
+                // No backoffice user means the delete came from a background process:
                 // an Umbraco Deploy transfer, a code-based delete, etc.
                 Guid userKey = Guid.Empty;
                 var userName = "System";
