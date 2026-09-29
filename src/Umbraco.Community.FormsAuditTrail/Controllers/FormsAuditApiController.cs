@@ -237,7 +237,7 @@ public class FormsAuditApiController : ControllerBase
         CancellationToken cancellationToken)
     {
         // Project server-side to avoid pulling the (large) snapshot columns,
-        // then finish the mapping in memory — enum names and JSON parsing don't translate to SQL.
+        // then finish the mapping in memory, because enum names and JSON parsing don't translate to SQL.
         var rows = await query
             .OrderByDescending(e => e.Timestamp)
             .ThenByDescending(e => e.Id)

@@ -115,7 +115,7 @@ public class FormSnapshotService : IFormSnapshotService
     };
 }
 
-// Snapshot DTOs — plain data classes for clean serialization
+// Snapshot DTOs: plain data classes for clean serialization
 internal record FormSnapshot
 {
     public Guid Id { get; init; }

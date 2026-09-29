@@ -265,7 +265,7 @@ public class FormDiffService : IFormDiffService
             return $"Workflow '{name}' setting '{settingKey}' changed from '{oldVal}' to '{newVal}'";
         }
 
-        // Generic fallback — include field context if this property belongs to a field
+        // Generic fallback: include field context if this property belongs to a field
         var segment = path.Split('.').LastOrDefault() ?? path;
         var fieldContext = GetFieldContext(path, afterFlat, beforeFlat);
         var forField = fieldContext != null ? $" for '{fieldContext}'" : "";
@@ -482,7 +482,7 @@ public class FormDiffService : IFormDiffService
         return result;
     }
 
-    // Strip internal/system property changes on existing (modified) fields — these are never meaningful to show
+    // Strip internal/system property changes on existing (modified) fields, because these are never meaningful to show
     private static readonly HashSet<string> _noisyFieldSuffixes =
     [
         ".Id", ".FieldTypeId", ".FieldTypeName", ".ShowLabel", ".ActionType", ".LogicType",

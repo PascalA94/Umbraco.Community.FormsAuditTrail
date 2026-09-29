@@ -60,7 +60,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
-    <!-- The client source is not package content — only the built wwwroot assets ship -->
+    <!-- The client source is not package content; only the built wwwroot assets ship -->
     <Content Remove="Client\**" />
     <None Include="Client\**" Pack="false" />
   </ItemGroup>
