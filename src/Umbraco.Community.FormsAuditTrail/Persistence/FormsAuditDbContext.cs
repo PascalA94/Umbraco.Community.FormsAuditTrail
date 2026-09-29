@@ -4,7 +4,7 @@ using Umbraco.Community.FormsAuditTrail.Models;
 namespace Umbraco.Community.FormsAuditTrail.Persistence;
 
 /// <summary>
-/// Audit trail database context. Never registered directly — the composer registers a
+/// Audit trail database context. Never registered directly; the composer registers a
 /// provider-specific derived context (<see cref="SqliteFormsAuditDbContext"/> or
 /// <see cref="SqlServerFormsAuditDbContext"/>) matching the configured Umbraco database provider,
 /// mapped to this type for consumers.
@@ -36,7 +36,7 @@ public abstract class FormsAuditDbContext : DbContext
             entity.Property(e => e.UserName).HasMaxLength(500);
 
             // Timestamps are written as DateTime.UtcNow but come back from the database with
-            // DateTimeKind.Unspecified — restore the UTC kind so they serialize with a Z suffix.
+            // DateTimeKind.Unspecified, so restore the UTC kind so they serialize with a Z suffix.
             entity.Property(e => e.Timestamp)
                   .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
 

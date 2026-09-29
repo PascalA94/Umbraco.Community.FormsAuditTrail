@@ -7,7 +7,7 @@ export default defineConfig({
       formats: ['es'],
       fileName: () => 'index.js',
     },
-    // Build straight into the RCL's wwwroot — served at /App_Plugins/FormsAuditTrail/
+    // Build straight into the RCL's wwwroot, served at /App_Plugins/FormsAuditTrail/
     // via static web assets. umbraco-package.json is copied from public/.
     outDir: '../wwwroot',
     emptyOutDir: true,

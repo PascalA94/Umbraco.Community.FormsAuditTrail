@@ -104,7 +104,7 @@ public class FormSnapshotServiceTests
         var json = _sut.Serialize(form);
         using var doc = JsonDocument.Parse(json);
 
-        // Timestamps and author metadata would make every diff noisy — they must not be snapshotted
+        // Timestamps and author metadata would make every diff noisy, so they must not be snapshotted
         Assert.False(doc.RootElement.TryGetProperty("Created", out _));
         Assert.False(doc.RootElement.TryGetProperty("CreatedBy", out _));
     }
