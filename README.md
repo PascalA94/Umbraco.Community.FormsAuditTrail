@@ -2,7 +2,24 @@
 
 A view-only audit trail for **Umbraco Forms design changes**. It records who changed what on a form design (not form submissions) and shows the history in a backoffice dashboard.
 
-Umbraco keeps an audit trail for content, but Forms changes have never had one. This package adds it.
+## Compared with Forms' built-in history
+
+Umbraco Forms 17.6 added its own form history. It saves a version every time a form is saved, lists the history on each form's Info tab, and can roll a form back to an earlier version. Before 17.6, Forms kept no history of design changes, so on Forms 17.5 this package is the only record.
+
+The two cover different needs:
+
+| | Forms 17.6+ history | This package |
+|---|---|---|
+| Where it appears | The Info tab of each form | One dashboard in the Forms section, covering every form |
+| What a change shows | The saved version as raw JSON | Field-level changes: added, removed, moved or modified |
+| Finding changes | A list per form, newest first | Filters by form, event type, user and date range |
+| Export | None documented | CSV, following the active filters |
+| Rollback | Yes | No, the package is view-only |
+| Moving to the recycle bin and restoring | Recorded | Not recorded |
+| After a form is permanently deleted | Its saved versions are deleted with it | Its audit history is kept |
+| Retention | Version cleanup, off by default (`Umbraco:Forms:Options:FormVersionCleanup`) | `RetentionDays`, off by default |
+
+They work side by side. Use Forms' history to roll a form back, and this package to see who changed what across all your forms, to export that for a review, or to keep a record of forms that have since been deleted.
 
 ## Compatibility
 
@@ -89,14 +106,11 @@ The package creates three tables in the Umbraco database:
 - Moving a form to the Forms recycle bin and restoring it are not recorded: Forms does not raise a notification for moving a form to the recycle bin or restoring it. A permanent delete is recorded.
 - A rollback to an earlier version (Umbraco Forms 17.6 and later) appears as a normal `Saved` entry, since Forms saves the form to perform it.
 
-Umbraco Forms 17.6 and later has its own per-form history and rollback. This package complements it with a dashboard across all forms, field-level diffs, filtering and CSV export.
-
 ## Roadmap
 
 Ideas for future versions. Contributions are welcome.
 
 - Backoffice localisation
-- Audit entries shown on the form editor itself (a per-form history view)
 - Auditing other Umbraco Forms entities (datasources, prevalue sources, folders)
 
 ## Building from source
