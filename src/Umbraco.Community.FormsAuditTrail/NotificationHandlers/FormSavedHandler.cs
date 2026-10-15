@@ -59,11 +59,7 @@ public class FormSavedHandler : INotificationAsyncHandler<FormSavedNotification>
                 string? beforeJson = notificationBeforeJson;
                 if (!isNew)
                 {
-                    var lastSnapshot = await db.AuditEntries
-                        .Where(e => e.FormId == form.Id && e.AfterSnapshot != null)
-                        .OrderByDescending(e => e.Id)
-                        .Select(e => e.AfterSnapshot)
-                        .FirstOrDefaultAsync(cancellationToken);
+                    var lastSnapshot = await db.GetLastAfterSnapshotAsync(form.Id, cancellationToken);
                     if (lastSnapshot != null)
                     {
                         beforeJson = lastSnapshot;
