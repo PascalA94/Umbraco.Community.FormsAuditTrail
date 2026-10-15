@@ -27,7 +27,7 @@ internal sealed class TestDatabase : IDisposable
         Context.Database.EnsureCreated();
     }
 
-    public FormAuditEntry AddEntry(Guid formId, string formName, DateTime timestampUtc, string userName = "Editor", int changeCount = 0)
+    public FormAuditEntry AddEntry(Guid formId, string formName, DateTime timestampUtc, string userName = "Editor", int changeCount = 0, string? afterSnapshot = "{}")
     {
         var entry = new FormAuditEntry
         {
@@ -38,7 +38,7 @@ internal sealed class TestDatabase : IDisposable
             Timestamp = timestampUtc,
             EventType = (int)AuditEventType.Saved,
             BeforeSnapshot = "{}",
-            AfterSnapshot = "{}",
+            AfterSnapshot = afterSnapshot,
         };
         for (var i = 0; i < changeCount; i++)
         {

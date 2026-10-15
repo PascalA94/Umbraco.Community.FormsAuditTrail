@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Umbraco.Cms.Core.Events;
@@ -59,11 +58,7 @@ public class FormSavedHandler : INotificationAsyncHandler<FormSavedNotification>
                 string? beforeJson = notificationBeforeJson;
                 if (!isNew)
                 {
-                    var lastSnapshot = await db.AuditEntries
-                        .Where(e => e.FormId == form.Id && e.AfterSnapshot != null)
-                        .OrderByDescending(e => e.Id)
-                        .Select(e => e.AfterSnapshot)
-                        .FirstOrDefaultAsync(cancellationToken);
+                    var lastSnapshot = await db.GetLastAfterSnapshotAsync(form.Id, cancellationToken);
                     if (lastSnapshot != null)
                     {
                         beforeJson = lastSnapshot;
@@ -89,14 +84,7 @@ public class FormSavedHandler : INotificationAsyncHandler<FormSavedNotification>
 
                 // No backoffice user means the save came from a background process:
                 // an Umbraco Deploy transfer, a code-based save, etc.
-                Guid userKey = Guid.Empty;
-                var userName = "System";
-                IBackOfficeSecurity? security = _backOfficeSecurityAccessor.BackOfficeSecurity;
-                if (security?.CurrentUser != null)
-                {
-                    userKey = security.CurrentUser.Key;
-                    userName = security.CurrentUser.Name ?? "System";
-                }
+                (Guid userKey, string userName) = AuditHandlerHelpers.GetCurrentUser(_backOfficeSecurityAccessor);
 
                 var entry = new FormAuditEntry
                 {
