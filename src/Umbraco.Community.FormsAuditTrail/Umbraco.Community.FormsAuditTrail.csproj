@@ -14,7 +14,7 @@
 
   <PropertyGroup>
     <PackageId>Umbraco.Community.FormsAuditTrail</PackageId>
-    <Version>17.0.1</Version>
+    <Version>17.0.2</Version>
     <Authors>Pascal Meyer</Authors>
     <Description>A view-only audit trail for Umbraco Forms design changes. Tracks who changed what on form designs (fields, pages, workflows and form settings) and surfaces the history in a backoffice dashboard with filtering, field-level diffs and CSV export.</Description>
     <Copyright>Copyright © Pascal Meyer</Copyright>

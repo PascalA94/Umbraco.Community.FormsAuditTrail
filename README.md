@@ -24,7 +24,7 @@ The first release, `1.0.0`, targeted Umbraco 17 before this scheme existed. It i
 dotnet add package Umbraco.Community.FormsAuditTrail
 
 # Umbraco 17 - pin a 17.x version, otherwise the latest (18.x) is selected and restore fails
-dotnet add package Umbraco.Community.FormsAuditTrail --version 17.0.1
+dotnet add package Umbraco.Community.FormsAuditTrail --version 17.0.2
 ```
 
 The package registers itself through an `IComposer` and creates its database tables on startup. The dashboard appears as a **Forms Audit Trail** tab in the Forms section of the backoffice.
@@ -86,6 +86,10 @@ The package creates three tables in the Umbraco database:
 - Workflow property changes (renames, settings edits, or toggling a workflow active in the workflow dialog) are captured on the *next* form save, not when they happen. Umbraco Forms writes workflows to the database before it fires form notifications. Workflow additions and removals are captured correctly.
 - Form copies are recorded as `Created` events, because Umbraco Forms 17 has no copy notification.
 - Umbraco Deploy transfers are recorded but attributed to **System**, not to the user who ran the deployment, because the notification doesn't include the deploying user.
+- Moving a form to the Forms recycle bin and restoring it are not recorded: Forms does not raise a notification for moving a form to the recycle bin or restoring it. A permanent delete is recorded.
+- A rollback to an earlier version (Umbraco Forms 17.6 and later) appears as a normal `Saved` entry, since Forms saves the form to perform it.
+
+Umbraco Forms 17.6 and later has its own per-form history and rollback. This package complements it with a dashboard across all forms, field-level diffs, filtering and CSV export.
 
 ## Roadmap
 

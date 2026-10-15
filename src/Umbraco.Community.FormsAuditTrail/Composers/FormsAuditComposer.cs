@@ -56,6 +56,7 @@ public class FormsAuditComposer : IComposer
         builder.AddNotificationHandler<FormSavingNotification, FormSavingHandler>();
         builder.AddNotificationAsyncHandler<FormSavedNotification, FormSavedHandler>();
         builder.AddNotificationHandler<FormDeletingNotification, FormDeletingHandler>();
+        builder.AddNotificationAsyncHandler<FormDeletedNotification, FormDeletedHandler>();
 
         builder.AddNotificationAsyncHandler<UmbracoApplicationStartedNotification, RunAuditMigration>();
     }
