@@ -9,10 +9,11 @@
   "devDependencies": {
     "@umbraco-cms/backoffice": "^18.2.0",
     "typescript": "^5.9.0",
-    "vite": "^7.0.0"
+    "vite": "^7.3.7"
   },
   "overrides": {
-    "js-yaml": "^4.3.2"
+    "js-yaml": "^4.3.2",
+    "dompurify": "^3.4.17"
   },
   "engines": {
     "node": ">=24.13"
