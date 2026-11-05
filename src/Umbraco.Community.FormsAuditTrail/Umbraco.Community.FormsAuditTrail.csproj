@@ -19,11 +19,11 @@
     <Copyright>Copyright © Pascal Meyer</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- TODO: update once the standalone GitHub repository exists -->
+    <PackageIcon>icon.png</PackageIcon>
     <PackageProjectUrl>https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail</PackageProjectUrl>
     <RepositoryUrl>https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>umbraco;umbraco-marketplace;umbraco-forms;audit;audit-trail;plugin;package</PackageTags>
+    <PackageTags>umbraco;umbraco-marketplace;umbraco-forms;forms;audit;audit-trail;change-tracking;backoffice;plugin;package</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
@@ -69,6 +69,7 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" />
     <!-- The client source is not package content; only the built wwwroot assets ship -->
     <Content Remove="Client\**" />
     <None Include="Client\**" Pack="false" />

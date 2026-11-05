@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Placeholder icon: a form with a history clock. Replace with a final design when one exists. -->
+  <rect width="128" height="128" rx="24" fill="#1b264f"/>
+  <rect x="24" y="20" width="62" height="84" rx="8" fill="#ffffff"/>
+  <rect x="34" y="34" width="42" height="7" rx="3.5" fill="#1b264f"/>
+  <rect x="34" y="50" width="42" height="9" rx="2" fill="none" stroke="#1b264f" stroke-width="3"/>
+  <rect x="34" y="67" width="30" height="9" rx="2" fill="none" stroke="#1b264f" stroke-width="3"/>
+  <circle cx="86" cy="86" r="24" fill="#f5c1bc" stroke="#1b264f" stroke-width="4"/>
+  <path d="M86 72v15l10 6" fill="none" stroke="#1b264f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Floor versions for the demo site. They match the minimums the package supports, so the demo
+    exercises the oldest supported Umbraco and Forms. Override on the command line
+    (-p:UmbracoDemoVersion=...) to try a newer minor.
+  -->
+  <PropertyGroup>
+    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">18.2.0</UmbracoDemoVersion>
+    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">18.1.3</FormsDemoVersion>
+  </PropertyGroup>
+</Project>
