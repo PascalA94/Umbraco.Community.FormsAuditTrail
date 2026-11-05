@@ -1,16 +1,41 @@
 {
   "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
   "Title": "Forms Audit Trail",
-  "Description": "A view-only audit trail for Umbraco Forms design changes. It tracks who changed what on form designs (fields, pages, workflows and form settings) and shows the history in a backoffice dashboard with filtering, field-level diffs and CSV export.\n\nUmbraco has a content audit trail, but Forms changes have never had one. This package fills that gap.",
-  "Category": "Forms",
+  "Description": "A view-only audit trail for Umbraco Forms design changes. It tracks who changed what on form designs (fields, pages, workflows and form settings) and shows the history in a backoffice dashboard with filtering, field-level diffs and CSV export.\n\nUmbraco Forms 17.6 and 18.2 keep a history on each form and can roll it back. This package adds one view across all forms, with field-level changes, filtering, CSV export and a record that outlasts deleted forms.",
+  "Category": "Editor Tools",
   "PackageType": "Package",
-  "LicenseTypes": ["Free"],
+  "LicenseTypes": [
+    "Free"
+  ],
   "DocumentationUrl": "https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail#readme",
   "IssueTrackerUrl": "https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/issues",
   "LookingForContributors": true,
   "AuthorDetails": {
     "Name": "Pascal Meyer",
-    "Url": "https://github.com/PascalA94"
+    "Url": "https://github.com/PascalA94",
+    "ImageUrl": "https://github.com/PascalA94.png"
   },
-  "Tags": ["forms", "audit", "audit-trail", "history", "backoffice", "dashboard"]
+  "Tags": [
+    "umbraco-forms",
+    "forms",
+    "audit",
+    "audit-trail",
+    "change-tracking",
+    "backoffice",
+    "dashboard"
+  ],
+  "Screenshots": [
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png",
+      "Caption": "Design changes across every form: who changed what and when, with filters and CSV export."
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-02-change-details.png",
+      "Caption": "One change opened to show its field-level diff: added, removed, modified and moved."
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-03-filters.png",
+      "Caption": "The history of a single form, from creation through every later edit."
+    }
+  ]
 }

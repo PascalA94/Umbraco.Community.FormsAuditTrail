@@ -1,6 +1,14 @@
 # Umbraco.Community.FormsAuditTrail
 
+[![NuGet](https://img.shields.io/nuget/v/Umbraco.Community.FormsAuditTrail)](https://www.nuget.org/packages/Umbraco.Community.FormsAuditTrail)
+[![NuGet downloads](https://img.shields.io/nuget/dt/Umbraco.Community.FormsAuditTrail)](https://www.nuget.org/packages/Umbraco.Community.FormsAuditTrail)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/blob/main/LICENSE)
+
+A community package, not made or supported by Umbraco HQ. Requires Umbraco 18.2+ with Umbraco Forms 18.1.3+ (package 18.x), or Umbraco 17.7+ with Umbraco Forms 17.5.2+ (package 17.x), on .NET 10.
+
 A view-only audit trail for **Umbraco Forms design changes**. It records who changed what on a form design (not form submissions) and shows the history in a backoffice dashboard.
+
+![The Forms Audit Trail dashboard](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png)
 
 ## Compared with Forms' built-in history
 
@@ -115,28 +123,8 @@ Ideas for future versions. Contributions are welcome.
 
 ## Building from source
 
-You need the .NET 10 SDK and Node.js 24.13 or later. The Node version is pinned in `Client/.nvmrc`: run `nvm use` with nvm or fnm, or `nvm use 24` with nvm-windows.
-
-The backoffice dashboard is written in Lit and TypeScript for the Umbraco Bellissima backoffice. Its built output in `wwwroot/` is committed, and CI fails a pull request when `wwwroot/` is out of date with the client source. Rebuild and commit it whenever you change anything under `Client/`.
-
-```bash
-# Frontend (output goes to wwwroot/, served via static web assets)
-cd src/Umbraco.Community.FormsAuditTrail/Client
-npm ci
-npm run build
-
-# Package
-cd ..
-dotnet pack -c Release
-```
-
-To regenerate the EF Core migrations (rarely needed):
-
-```bash
-dotnet ef migrations add <Name> --context SqliteFormsAuditDbContext --output-dir Migrations/Sqlite
-dotnet ef migrations add <Name> --context SqlServerFormsAuditDbContext --output-dir Migrations/SqlServer
-```
+See [CONTRIBUTING.md](https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/blob/main/.github/CONTRIBUTING.md) for the build and test commands, the demo site and how to try a local build in your own site.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/blob/main/LICENSE)
