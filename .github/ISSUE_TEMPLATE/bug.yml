@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in Forms Audit Trail does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Security issues: please don't open an issue.** Report them privately (see the Security tab).
+        Please don't paste form entries, submitted values, user names or email addresses from your site.
+  - type: input
+    id: umbraco
+    attributes:
+      label: Umbraco CMS version
+      description: The exact version, for example 18.2.0 (not "v18").
+    validations:
+      required: true
+  - type: input
+    id: forms
+    attributes:
+      label: Umbraco Forms version
+      description: The exact version, for example 18.1.3.
+    validations:
+      required: true
+  - type: input
+    id: package
+    attributes:
+      label: Forms Audit Trail version
+      description: For example 18.0.3.
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options: [SQL Server, SQLite, Umbraco Cloud, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: On a clean install if you can. Include any FormsAuditTrail settings you changed and whether Umbraco Deploy is installed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors
+      description: Browser console errors and server log lines, if any.
+      render: text
