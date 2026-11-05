@@ -1,0 +1,21 @@
+version: 2
+# Routine version-update PRs are off (open-pull-requests-limit: 0). Security updates still open PRs: they follow the
+# repository setting "Dependabot security updates", not this limit. Raise the limit to turn version updates back on.
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - /src
+      - /demo/Umbraco.Community.FormsAuditTrail.DemoSite
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: npm
+    directory: /src/Umbraco.Community.FormsAuditTrail/Client
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
