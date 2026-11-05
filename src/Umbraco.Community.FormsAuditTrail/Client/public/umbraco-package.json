@@ -1,6 +1,6 @@
 {
   "name": "Umbraco.Community.FormsAuditTrail",
-  "version": "18.0.3",
+  "version": "18.0.4",
   "allowTelemetry": true,
   "extensions": [
     {
