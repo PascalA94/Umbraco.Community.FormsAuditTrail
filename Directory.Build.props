@@ -1,10 +1,14 @@
 <Project>
   <!--
-    Floor versions for the demo site. They match the minimums the package supports, so the demo
-    exercises the oldest supported Umbraco and Forms. Override on the command line
-    (-p:UmbracoDemoVersion=...) to try a newer minor.
+    Lock files describe the floor: they are generated and committed at the default values below, and the floor CI
+    leg restores in locked mode. The latest CI leg overrides all four properties with 18.* and restores unlocked
+    (force-evaluate, RestoreLockedMode=false); the lock files it rewrites are never committed.
+    The defaults match the package's minimum Umbraco and Forms versions, so tests and the demo run at the floor.
   -->
   <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">18.2.0</UmbracoTestVersion>
+    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">18.1.3</FormsTestVersion>
     <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">18.2.0</UmbracoDemoVersion>
     <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">18.1.3</FormsDemoVersion>
   </PropertyGroup>
