@@ -12,12 +12,15 @@ Issues and pull requests are welcome. For anything bigger than a small fix, open
 You need the .NET 10 SDK and Node (the version in `src/Umbraco.Community.FormsAuditTrail/Client/.nvmrc`).
 
 ```bash
-dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release
+dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode
+dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore
 dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build
 
 cd src/Umbraco.Community.FormsAuditTrail/Client
 npm ci --ignore-scripts && npm run build
 ```
+
+The lock files pin Umbraco and Forms at the package's minimum versions. If you change a package reference, run a plain `dotnet restore` and commit the updated `packages.lock.json` files.
 
 The built client in `wwwroot/` is committed. Rebuild it when you change anything under `Client/`, and commit the result: CI fails if it drifts.
 

@@ -1,0 +1,6 @@
+# osv-scanner config, passed with --config in build.yml.
+# osv-scanner reads csproj version ranges such as [17.7.0, 18.0.0) as versions and matches advisories fixed long
+# before the floor. Ignore such a false positive here by ID with a reason; the lock files still pin the real versions.
+[[IgnoredVulns]]
+id = "GHSA-6ffg-mjg7-585x"
+reason = "Affects Umbraco.Cms.Api.Management < 14.3.3 and 15.0.0-rc1 to 15.2.3 only; the package floor is 17.7.0."
