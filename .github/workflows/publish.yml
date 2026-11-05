@@ -5,22 +5,57 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
+      contents: read
+      id-token: write # NuGet Trusted Publishing (OIDC): no long-lived API key
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
+      # A tag publishes only from its line's release branch: v18.* from main, v17.* from v17.
+      - name: Tag is on its release branch
+        run: |
+          case "$GITHUB_REF_NAME" in
+            v18.*) branch=main ;;
+            v17.*) branch=v17 ;;
+            *) echo "Unexpected tag $GITHUB_REF_NAME" >&2; exit 1 ;;
+          esac
+          git merge-base --is-ancestor "$GITHUB_SHA" "origin/$branch"
+
+      - name: Version files match the tag
+        run: bash build/check-release-version.sh "$GITHUB_REF_NAME"
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: src/Umbraco.Community.FormsAuditTrail/Client/.nvmrc
+
+      # The same client gates as build.yml, so a tag never publishes a client that CI did not check.
+      - name: Client build and wwwroot drift
+        run: |
+          cd src/Umbraco.Community.FormsAuditTrail/Client
+          npm ci --ignore-scripts
+          npm run build
+          cd ../../..
+          git diff --exit-code -- src/Umbraco.Community.FormsAuditTrail/wwwroot
+          test -z "$(git status --porcelain -- src/Umbraco.Community.FormsAuditTrail/wwwroot)"
+
+      # No NuGet or npm cache here: a release never restores from a cache that pull requests filled.
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.x'
 
-      - name: Restore
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx
+      - name: Restore (locked)
+        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode
 
       - name: Build
         run: dotnet build src/Umbraco.Community.FormsAuditTrail.slnx --no-restore -c Release
@@ -28,17 +63,19 @@ jobs:
       - name: Test
         run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx --no-build -c Release
 
+      # Parsed output, never the exit code.
+      - name: Vulnerable packages
+        run: bash build/check-vulnerable.sh
+
+      # Only the package is packed: tests and the demo site are IsPackable=false.
       - name: Pack
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           dotnet pack src/Umbraco.Community.FormsAuditTrail/Umbraco.Community.FormsAuditTrail.csproj \
-            --no-build -c Release \
-            -p:Version=$VERSION \
-            -o ./artifacts
+            --no-build -c Release -p:Version=$VERSION -o ./artifacts
 
-      # Trusted Publishing: exchange the GitHub OIDC token for a short-lived NuGet API key
-      - name: NuGet login
-        uses: NuGet/login@v1
+      - name: NuGet login (Trusted Publishing)
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         id: nuget-login
         with:
           user: ${{ secrets.NUGET_USER }}

@@ -12,6 +12,9 @@
     <PackageReference Include="Umbraco.Cms"/>
     <PackageReference Include="Umbraco.Cms.DevelopmentMode.Backoffice"/>
     <PackageReference Include="Umbraco.Forms"/>
+    <!-- Security minimum, see Directory.Packages.props. Build and analyzer assets are excluded exactly as Umbraco's own
+         reference does, so ImageSharp's licence-key build check only applies to direct commercial use, not this demo. -->
+    <PackageReference Include="SixLabors.ImageSharp" ExcludeAssets="build;buildTransitive;analyzers" PrivateAssets="all" />
   </ItemGroup>
 
   <PropertyGroup>
