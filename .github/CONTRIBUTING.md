@@ -32,13 +32,16 @@ dotnet ef migrations has-pending-model-changes --context SqlServerFormsAuditDbCo
 
 ## Try it on the demo site
 
-`demo/` is an Umbraco site with Umbraco Forms and this package, on SQLite. Set the admin password as a user secret, then run it:
+`demo/` is an Umbraco site with Umbraco Forms and this package, on SQLite. Set the admin password and an image-signing key as user secrets, then run it:
 
 ```bash
 cd demo/Umbraco.Community.FormsAuditTrail.DemoSite
 dotnet user-secrets set "Umbraco:CMS:Unattended:UnattendedUserPassword" "<pw>"
+dotnet user-secrets set "Umbraco:CMS:Imaging:HMACSecretKey" "$(openssl rand -base64 64 | tr -d '\n')"
 dotnet run --launch-profile Umbraco.Web.UI
 ```
+
+Without the key, Umbraco generates one on install and writes it into `appsettings.json`. Don't commit that change.
 
 Open https://localhost:44341/umbraco and log in as `admin@example.test`. The audit trail is the **Forms Audit Trail** tab in the Forms section. Forms runs in trial mode, which is fine locally. Delete `umbraco/Data` to start again from an empty database.
 
