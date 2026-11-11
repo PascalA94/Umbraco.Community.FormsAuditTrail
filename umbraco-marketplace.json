@@ -35,7 +35,7 @@
     },
     {
       "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-03-filters.png",
-      "Caption": "The history of a single form, from creation through every later edit."
+      "Caption": "Filtered to a single form (Contact us), showing its history from creation through every later edit."
     }
   ]
 }

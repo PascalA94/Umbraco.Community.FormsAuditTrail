@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- Placeholder icon: a form with a history clock. Replace with a final design when one exists. -->
+  <!-- A form with a history clock. icon.png is this file rendered at 128x128. -->
   <rect width="128" height="128" rx="24" fill="#1b264f"/>
   <rect x="24" y="20" width="62" height="84" rx="8" fill="#ffffff"/>
   <rect x="34" y="34" width="42" height="7" rx="3.5" fill="#1b264f"/>

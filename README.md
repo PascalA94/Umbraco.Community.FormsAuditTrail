@@ -8,7 +8,7 @@ A community package, not made or supported by Umbraco HQ. Requires Umbraco 18.2+
 
 A view-only audit trail for **Umbraco Forms design changes**. It records who changed what on a form design (not form submissions) and shows the history in a backoffice dashboard.
 
-![The Forms Audit Trail dashboard](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png)
+![Forms Audit Trail dashboard in the Forms section, listing design changes across all forms with filters and an Export CSV button](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png)
 
 ## Compared with Forms' built-in history
 
