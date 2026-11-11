@@ -49,7 +49,7 @@ The first release, `1.0.0`, targeted Umbraco 17 before this scheme existed. It i
 dotnet add package Umbraco.Community.FormsAuditTrail
 
 # Umbraco 17 - pin a 17.x version, otherwise the latest (18.x) is selected and restore fails
-dotnet add package Umbraco.Community.FormsAuditTrail --version 17.0.4
+dotnet add package Umbraco.Community.FormsAuditTrail --version 17.0.5
 ```
 
 The package registers itself through an `IComposer` and creates its database tables on startup. The dashboard appears as a **Forms Audit Trail** tab in the Forms section of the backoffice.
