@@ -26,7 +26,7 @@
 ## Open items and options for you (none block M1)
 
 - **Permanent form delete (S5):** Forms sends the record ids in the request, so these could be scrubbed in the request instead of waiting up to 24 h for reconciliation. Not adopted, because the design says form deletes may lag. Say if you want it in Task 14.
-- **Local paths in a public file:** `docs/plan.md` has 4 `/Users/...` paths copied from the workspace (the Repo and Spec lines, Task 1 Steps 1 and 2). CI rule 1 says no local paths. Strip them in the workspace and re-copy, or accept them.
+- **Local paths:** done. The 4 local paths in the plan were replaced in the workspace and re-copied to `docs/plan.md`.
 - Task 20 Step 4 is wrong for the "uploaded files by entry" exporter: it does capture ids. Only "in disk structure" shows "ids not captured". Fix it when Task 20 runs.
 - Things parked for later tasks:
   - README line 15 ("on Forms 18.1 this package is the only record") is stale under the new floor. Task 19.
