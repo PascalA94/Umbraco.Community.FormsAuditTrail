@@ -4,7 +4,7 @@
 [![NuGet downloads](https://img.shields.io/nuget/dt/Umbraco.Community.FormsAuditTrail)](https://www.nuget.org/packages/Umbraco.Community.FormsAuditTrail)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/blob/main/LICENSE)
 
-A community package, not made or supported by Umbraco HQ. Requires Umbraco 18.2+ with Umbraco Forms 18.1.3+ (package 18.x), or Umbraco 17.7+ with Umbraco Forms 17.5.2+ (package 17.x), on .NET 10.
+A community package, not made or supported by Umbraco HQ. Requires Umbraco 18.3+ with Umbraco Forms 18.2.2+ (package 18.x), or Umbraco 17.7+ with Umbraco Forms 17.5.2+ (package 17.x), on .NET 10.
 
 A view-only audit trail for **Umbraco Forms design changes**. It records who changed what on a form design (not form submissions) and shows the history in a backoffice dashboard.
 
@@ -33,7 +33,7 @@ They work side by side. Use Forms' history to roll a form back, and this package
 
 | Package version | Branch | Umbraco CMS | Umbraco Forms | .NET | Database |
 |---|---|---|---|---|---|
-| 18.x | `main` | 18.2+ | 18.1.3+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| 18.x | `main` | 18.3+ | 18.2.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
 | 17.x | `v17` | 17.7+ | 17.5.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
 
 ### Versioning
