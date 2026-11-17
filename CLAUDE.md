@@ -12,7 +12,7 @@ The package major version matches the Umbraco major it targets. Each line lives 
 
 | Branch | Package | Umbraco CMS | Umbraco Forms | backoffice npm |
 |---|---|---|---|---|
-| `main` | 18.x | `[18.2.0, 19.0.0)` | `[18.1.3, 19.0.0)` | `^18.2.0` |
+| `main` | 18.x | `[18.3.0, 19.0.0)` | `[18.2.2, 19.0.0)` | `^18.2.0` |
 | `v17` | 17.x | `[17.7.0, 18.0.0)` | `[17.5.2, 18.0.0)` | `^17.7.0` |
 
 - **This branch is `main` (Umbraco 18).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`.

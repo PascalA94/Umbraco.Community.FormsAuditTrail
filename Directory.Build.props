@@ -7,9 +7,9 @@
   -->
   <PropertyGroup>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">18.2.0</UmbracoTestVersion>
-    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">18.1.3</FormsTestVersion>
-    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">18.2.0</UmbracoDemoVersion>
-    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">18.1.3</FormsDemoVersion>
+    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">18.3.0</UmbracoTestVersion>
+    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">18.2.2</FormsTestVersion>
+    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">18.3.0</UmbracoDemoVersion>
+    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">18.2.2</FormsDemoVersion>
   </PropertyGroup>
 </Project>
