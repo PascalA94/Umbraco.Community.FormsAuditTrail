@@ -12,10 +12,11 @@ The package major version matches the Umbraco major it targets. Each line lives 
 
 | Branch | Package | Umbraco CMS | Umbraco Forms | backoffice npm |
 |---|---|---|---|---|
-| `main` | 18.x | `[18.2.0, 19.0.0)` | `[18.1.3, 19.0.0)` | `^18.2.0` |
-| `v17` | 17.x | `[17.7.0, 18.0.0)` | `[17.5.2, 18.0.0)` | `^17.7.0` |
+| `main` | 18.x | `[18.3.0, 19.0.0)` | `[18.2.2, 19.0.0)` | `^18.3.0` |
+| `v17` | 17.x | `[17.8.0, 18.0.0)` | `[17.6.2, 18.0.0)` | `^17.7.0` |
 
 - **This branch is `v17` (Umbraco 17 maintenance).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`.
+- The package's Umbraco floors live in `Directory.Build.props` as `UmbracoCmsVersion` (used by all four CMS references, including `Umbraco.Cms.Api.Management`) and `UmbracoFormsVersion`; CI's latest leg overrides them with `17.*`. Tests and the demo use exact `Umbraco*Version`/`Forms*Version` values at the same floors. Forms 17.6.2 needs CMS `[17.6.0, 18.0.0)`.
 - Umbraco and EF Core references are **range floors**. Raising a floor forces every consuming site to upgrade, so only raise one when there is a concrete reason (a required API, a security fix) and say why in the PR.
 - A version bump touches four files, which must stay in step: the `<Version>` in `Umbraco.Community.FormsAuditTrail.csproj`, `Client/package.json`, `Client/package-lock.json` (run `npm install --package-lock-only`) and `Client/public/umbraco-package.json` (the version shown in the backoffice). Then rebuild the client.
 - A 17.x release also updates the pinned Umbraco 17 install command (`--version 17.x.y`) in `README.md` on **both** branches: `main`'s README is what GitHub shows, and each branch's README ships on its own NuGet versions.
@@ -30,6 +31,9 @@ Requires the .NET 10 SDK and Node.js 24.13+ (`src/Umbraco.Community.FormsAuditTr
 dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode   # lock files pin the Umbraco/Forms floors
 dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore
 dotnet test  src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build
+
+# Latest leg (newest 17.x, unlocked restore; never commit the lock files it rewrites)
+dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx '-p:UmbracoCmsVersion=17.*' '-p:UmbracoFormsVersion=17.*' '-p:UmbracoTestVersion=17.*' '-p:FormsTestVersion=17.*' '-p:UmbracoDemoVersion=17.*' '-p:FormsDemoVersion=17.*' --force-evaluate -p:RestoreLockedMode=false
 
 # Security gates (also run in CI)
 bash build/check-vulnerable.sh
