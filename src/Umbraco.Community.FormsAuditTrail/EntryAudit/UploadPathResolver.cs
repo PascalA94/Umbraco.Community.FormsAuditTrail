@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Http;
 namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 
 /// <summary>
-/// Reads Forms' upload paths the way Forms does (spike S11, docs/spikes.md), so a request Forms serves is never one the
-/// audit fails to recognise.
+/// Resolves the path the way the file system serves it, so the recorded form and hash are those of the file served and
+/// a served request is never one the audit fails to recognise (spike S11, docs/spikes.md).
 /// </summary>
 public interface IUploadPathResolver
 {
@@ -40,7 +40,7 @@ internal sealed class UploadPathResolver : IUploadPathResolver
 
     public Guid? ResolveFormId(PathString path)
     {
-        // Forms takes the first form_ segment and parses the rest; a later segment is never tried if that one fails.
+        // The first form_ segment decides; a later segment is never tried if that one fails to parse.
         string? segment = Segments(path).FirstOrDefault(s => s.StartsWith(FormSegmentPrefix, StringComparison.Ordinal));
         return segment is not null && Guid.TryParse(segment.AsSpan(FormSegmentPrefix.Length), out Guid formId) ? formId : null;
     }
@@ -57,8 +57,64 @@ internal sealed class UploadPathResolver : IUploadPathResolver
     // provider on Windows treats it as a separator, so matching only '/' could miss a path that serves a file.
     private static readonly char[] Separators = ['/', '\\'];
 
-    private static string[] Segments(PathString path) =>
-        (path.Value ?? string.Empty).Split(Separators, StringSplitOptions.RemoveEmptyEntries);
+    private static readonly char[] TrailingIgnored = ['.', ' '];
+
+    /// <summary>
+    /// Trims trailing dots and spaces from every segment, a superset of Windows' rules, so an equivalent path is not
+    /// missed; only a served status is recorded, so a non-matching variant adds no row. A <c>.</c> segment is a no-op
+    /// and <c>..</c> steps up. Applied on every platform, so the result does not depend on the host's file system.
+    /// A segment of only dots and spaces (<c>...</c>, a space) is an ordinary name on Windows that a later <c>..</c>
+    /// removes, so it is held as a placeholder while resolving. If that reading does not land under the upload root
+    /// but the reading that simply drops such segments does, the second is used: fail toward recording.
+    /// </summary>
+    private static string[] Segments(PathString path)
+    {
+        string[] raw = (path.Value ?? string.Empty).Split(Separators, StringSplitOptions.RemoveEmptyEntries);
+        string[] withPlaceholders = Resolve(raw, keepEmptyAsPlaceholder: true);
+        if (IsUploadFile(withPlaceholders))
+        {
+            return withPlaceholders;
+        }
+
+        string[] dropped = Resolve(raw, keepEmptyAsPlaceholder: false);
+        return IsUploadFile(dropped) ? dropped : withPlaceholders;
+    }
+
+    private static bool IsUploadFile(string[] segments) => segments.Length > UploadRoot.Length && UnderRoot(segments);
+
+    private static string[] Resolve(string[] raw, bool keepEmptyAsPlaceholder)
+    {
+        var resolved = new List<string>();
+        foreach (string part in raw)
+        {
+            if (part == ".")
+            {
+                continue;
+            }
+
+            if (part == "..")
+            {
+                if (resolved.Count > 0)
+                {
+                    resolved.RemoveAt(resolved.Count - 1);
+                }
+
+                continue;
+            }
+
+            string segment = part.TrimEnd(TrailingIgnored);
+            if (segment.Length > 0)
+            {
+                resolved.Add(segment);
+            }
+            else if (keepEmptyAsPlaceholder)
+            {
+                resolved.Add(string.Empty);
+            }
+        }
+
+        return [.. resolved.Where(static s => s.Length > 0)];
+    }
 
     private static bool UnderRoot(string[] segments)
     {
