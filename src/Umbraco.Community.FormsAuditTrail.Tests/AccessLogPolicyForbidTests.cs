@@ -199,6 +199,17 @@ public sealed class AccessLogPolicyForbidTests : IAsyncLifetime
         Assert.Null(response.Headers.Location);
     }
 
+    [Theory]
+    [MemberData(nameof(AccessRoutes))]
+    public async Task AccessRoutes_Unauthenticated_Gets401NotALoginRedirect(string path)
+    {
+        // No test-user header: the token scheme finds no credentials, so the challenge answers 401.
+        using HttpResponseMessage response = await _client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
     [Fact]
     public async Task AccessList_AccessLogReader_Gets200() // merge-fix 21, R75
     {

@@ -242,8 +242,17 @@ public class FormDeletedHandler : INotificationAsyncHandler<FormDeletedNotificat
             return (Guid.Empty, AuditUserNames.System, false);
         }
 
-        return AuditHandlerHelpers.TryGetCurrentUser(_securityAccessor, out Guid key, out string name)
-            ? (key, name, false)
-            : (Guid.Empty, AuditUserNames.Unknown, true);
+        // Throw-safe: this is also called from a catch block and must not cost the access row. A lookup that
+        // fails is an unresolvable user, recorded as Unknown, never System.
+        try
+        {
+            return AuditHandlerHelpers.TryGetCurrentUser(_securityAccessor, out Guid key, out string name)
+                ? (key, name, false)
+                : (Guid.Empty, AuditUserNames.Unknown, true);
+        }
+        catch
+        {
+            return (Guid.Empty, AuditUserNames.Unknown, true);
+        }
     }
 }
