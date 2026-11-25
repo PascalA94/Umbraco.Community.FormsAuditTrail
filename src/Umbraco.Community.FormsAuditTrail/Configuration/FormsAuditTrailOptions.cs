@@ -21,4 +21,10 @@ public class FormsAuditTrailOptions
     /// for hosts that don't want audit data leaving the backoffice. Enabled by default.
     /// </summary>
     public bool EnableCsvExport { get; set; } = true;
+
+    /// <summary>Entry access and edit audit settings (design 7.7).</summary>
+    public EntryAuditOptions EntryAudit { get; set; } = new();
+
+    /// <summary>Whether the access-log CSV is enabled: its own key when set, else the definition CSV switch (SEC-L4).</summary>
+    public bool EntryAuditCsvEnabled => EntryAudit.EnableCsvExport ?? EnableCsvExport;
 }

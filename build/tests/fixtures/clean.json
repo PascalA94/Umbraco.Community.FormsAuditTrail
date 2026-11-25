@@ -1,0 +1,1 @@
+{"version":1,"parameters":"--vulnerable --include-transitive","sources":["https://api.nuget.org/v3/index.json"],"projects":[{"path":"/r/src/Pkg/Pkg.csproj"},{"path":"/r/src/Tests/Tests.csproj"}]}

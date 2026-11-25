@@ -1,12 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Infrastructure.DependencyInjection;
 using Umbraco.Community.FormsAuditTrail.BackgroundJobs;
 using Umbraco.Community.FormsAuditTrail.Configuration;
+using Umbraco.Community.FormsAuditTrail.EntryAudit;
 using Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 using Umbraco.Community.FormsAuditTrail.Persistence;
 using Umbraco.Community.FormsAuditTrail.Services;
@@ -46,9 +48,22 @@ public class FormsAuditComposer : IComposer
                 : serviceProvider.GetRequiredService<SqlServerFormsAuditDbContext>();
         });
 
-        builder.Services.AddOptions<FormsAuditTrailOptions>()
-            .Bind(builder.Config.GetSection(FormsAuditTrailOptions.SectionName));
+        FormsAuditTrailOptionsRegistration.Add(builder.Services, builder.Config);
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        // Singleton because it holds only the scope factory; the reader is scoped and resolved inside the job's own scope.
+        builder.Services.AddSingleton<IAuditStateStore, AuditStateStore>();
+        builder.Services.AddScoped<IFormsRecordReader, UmbracoFormsRecordReader>();
         builder.Services.AddRecurringBackgroundJob<AuditRetentionJob>();
+
+
+        // Umbraco registers this already; AddHttpContextAccessor is a TryAdd, so naming the dependency here is harmless.
+        builder.Services.AddHttpContextAccessor();
+        // Scoped so each request gets its own capture window. The accessor is a singleton that reaches it through
+        // RequestServices, which is why it never holds the scoped instance itself (P2).
+        builder.Services.AddScoped<EntryAuditCollector>();
+        builder.Services.AddSingleton<IEntryAuditCollectorAccessor, EntryAuditCollectorAccessor>();
+        // Singleton, and it owns a private bounded cache rather than the shared IMemoryCache (SEC-L6).
+        builder.Services.AddSingleton<EntryAuditDeduplicator>();
 
         builder.Services.AddScoped<IFormSnapshotService, FormSnapshotService>();
         builder.Services.AddScoped<IFormDiffService, FormDiffService>();

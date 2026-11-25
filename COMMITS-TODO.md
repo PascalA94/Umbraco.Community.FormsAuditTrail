@@ -8,9 +8,23 @@ Pascal commits once per milestone (the "Milestone commit" block at the end). The
 - [x] Tasks 2 to 5: `docs: record M0 spike results` (S1 to S12 in `docs/spikes.md`, short table at the end of `docs/plan.md`)
 - [x] M0 stop: full suite 57/57, 0 warnings, check-vulnerable clean, gitleaks clean on the files to be committed. Each spike's results had a qa-reviewer read; every Important finding fixed and re-checked.
 
+## M1 checkpoints
+
+Branch `fc/m1-schema`. Pascal asked (2026-11-24) to keep building past M1 without stopping, so later milestones sit in the same working tree. Each milestone's end state is saved as a git tree object (see "Milestone commits" below).
+
+- [x] Task 6: `chore: pin vulnerable transitive packages, raise the client floor and add Forms contract tests`
+- [x] Task 6a: `ci: add a vulnerable-package gate, npm audit and supply-chain hardening`
+- [x] Task 7: `feat: add EntryAudit options with validation`
+- [x] Task 8: `feat: add entry access tables and migrations for SQLite and SQL Server` (plus `release-checks.yml`, a manual workflow for the SQL Server tests)
+- [x] Task 9: `feat: add access retention, edit value expiry and erasure reconciliation to the daily job`
+- M1 end tree: `93900d7`
+
 ## Adapted from UserActivity
 
-None in M0 (no M0 task carries a "Reuse (2026-11-16)" line).
+- M0: none.
+- Task 7: `Configuration/UserActivityOptions.cs`, `Configuration/UserActivityOptionsValidator.cs` (options shape, post-configure and validation).
+- Task 8: none copied (read for the shared column-width constant idea only).
+- Task 9: `Recorder/RetentionJob.cs` (batch loop, exception-type-only outcomes, zero days means skip), `Recorder/RecorderSql.cs` (parameterised SQL, quoted names via the syntax provider). Patterns adapted, no verbatim copy.
 
 ## Paused here (2026-11-16)
 

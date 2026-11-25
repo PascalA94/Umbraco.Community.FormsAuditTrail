@@ -5,38 +5,10 @@
 set -euo pipefail
 
 TARGET="${1:-src/Umbraco.Community.FormsAuditTrail.slnx}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="$(mktemp)"
 trap 'rm -f "$OUT"' EXIT
 
 dotnet list "$TARGET" package --vulnerable --include-transitive --format json > "$OUT" || true
 
-python3 - "$OUT" <<'PY'
-import json, sys
-path = sys.argv[1]
-try:
-    data = json.load(open(path, encoding="utf-8-sig"))
-except Exception as e:  # unparseable output is a failure, not a pass
-    print(f"check-vulnerable: could not parse dotnet output: {e}", file=sys.stderr)
-    print(open(path, encoding="utf-8", errors="replace").read(), file=sys.stderr)
-    sys.exit(1)
-if data.get("problems"):
-    for p in data["problems"]:
-        print(f"check-vulnerable: problem: {p.get('text')}", file=sys.stderr)
-    sys.exit(1)
-found = []
-for proj in data.get("projects", []):
-    for fw in proj.get("frameworks", []) or []:
-        for kind in ("topLevelPackages", "transitivePackages"):
-            for pkg in fw.get(kind, []) or []:
-                for v in pkg.get("vulnerabilities", []) or []:
-                    found.append(f"{proj['path']}: {pkg['id']} {pkg.get('resolvedVersion')} {v.get('severity')} {v.get('advisoryurl')}")
-if not data.get("projects"):
-    print("check-vulnerable: no projects in output", file=sys.stderr)
-    sys.exit(1)
-if found:
-    print("check-vulnerable: vulnerable packages found:", file=sys.stderr)
-    for f in found:
-        print("  " + f, file=sys.stderr)
-    sys.exit(1)
-print(f"check-vulnerable: no vulnerable packages in {len(data['projects'])} project(s)")
-PY
+python3 -I "$HERE/check-vulnerable.py" "$OUT"
