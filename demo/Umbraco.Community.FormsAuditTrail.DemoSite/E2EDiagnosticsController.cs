@@ -146,33 +146,34 @@ public sealed class E2EDiagnosticsController(
     }
 
     [HttpPost("ufrecords/break")]
-    public async Task<IActionResult> BreakUfRecords(CancellationToken ct)
-    {
-        if (db.Database.IsSqlite())
-        {
-            await db.Database.ExecuteSqlRawAsync($"ALTER TABLE UFRecords RENAME TO UFRecords{BrokenSuffix}", ct);
-        }
-        else
-        {
-            // Needs a principal that is not sysadmin or db_owner, which DENY does not bind; the SQL Server run says so.
-            // Named principal through QUOTENAME so the statement is explicit about who is denied. DENY does not bind dbo
-            // or a sysadmin login: the run must connect as a plain database user (Task 18b).
-            await db.Database.ExecuteSqlRawAsync("DECLARE @u sysname = QUOTENAME(USER_NAME()); EXEC(N'DENY SELECT ON OBJECT::UFRecords TO ' + @u);", ct);
-        }
-
-        return NoContent();
-    }
+    public Task<IActionResult> BreakUfRecords(CancellationToken ct) =>
+        ChangeUfRecordsAsync($"ALTER TABLE UFRecords RENAME TO UFRecords{BrokenSuffix}", "break", ct);
 
     [HttpPost("ufrecords/restore")]
-    public async Task<IActionResult> RestoreUfRecords(CancellationToken ct)
+    public Task<IActionResult> RestoreUfRecords(CancellationToken ct) =>
+        ChangeUfRecordsAsync($"ALTER TABLE UFRecords{BrokenSuffix} RENAME TO UFRecords", "restore", ct);
+
+    // SQLite only. On SQL Server the site's own login cannot DENY or REVOKE on itself ("Cannot grant, deny, or revoke
+    // permissions to ... yourself"), so the suite does it through a privileged login (E2E_SQLCMD, see support/reconcile.ts)
+    // and this endpoint refuses with 409 instead of pretending to have done it. A failed statement is a 500 that names
+    // the exception type, never its message, which can carry connection or table detail.
+    private async Task<IActionResult> ChangeUfRecordsAsync(string sqliteStatement, string action, CancellationToken ct)
     {
-        if (db.Database.IsSqlite())
+        if (!db.Database.IsSqlite())
         {
-            await db.Database.ExecuteSqlRawAsync($"ALTER TABLE UFRecords{BrokenSuffix} RENAME TO UFRecords", ct);
+            return Problem(
+                title: $"ufrecords/{action} is not supported on this provider",
+                detail: "The site's login cannot DENY or REVOKE on itself. Run the statement through a privileged login (E2E_SQLCMD).",
+                statusCode: StatusCodes.Status409Conflict);
         }
-        else
+
+        try
         {
-            await db.Database.ExecuteSqlRawAsync("DECLARE @u sysname = QUOTENAME(USER_NAME()); EXEC(N'REVOKE SELECT ON OBJECT::UFRecords FROM ' + @u);", ct);
+            await db.Database.ExecuteSqlRawAsync(sqliteStatement, ct);
+        }
+        catch (Exception ex)
+        {
+            return Problem(title: $"ufrecords/{action} failed", detail: ex.GetType().Name, statusCode: StatusCodes.Status500InternalServerError);
         }
 
         return NoContent();

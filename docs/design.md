@@ -630,7 +630,7 @@ The rule for any type S11 or a later Forms version adds: an endpoint that return
 - **Before values come through Forms' own read path, never raw SQL (SEC-04).** Parsing `UFRecords.RecordData` ourselves would read ciphertext on a site that encrypts entries at rest, diff every field as changed, and store decrypted after-values outside the encryption the site chose.
   - In the filter's `OnActionExecutionAsync`, **before** `await next()`, for an `UpdateRecordController` match: load the record through `IRecordStorage` (the read path Forms itself uses, so any `RecordFetchingNotification` / decrypting hook runs) and **copy** its field values into the capture window as a plain dictionary. Copy, because storage may return the same instance that Forms then mutates.
   - This was the S2 NO-GO fallback in the first draft. It is now the only path, and the ambient-scope raw read is dropped.
-  - Cost: one extra record read per backoffice edit, not per list or submission.
+  - Cost: one extra record read per backoffice edit, not per list or submission. The form definition is read once per request (`RequestFormCache`) and reused for the field captions, the sensitive flags and the row's form name: each `IFormService.Get` is a database read, and three of them per edit pushed the SQL Server edit overhead towards or past 10 ms. Because the definition is read before the Forms action runs, a field marked sensitive during that action applies from the next edit, not the one in flight.
   - If that read fails, the Forms action still runs (E12) and the `Edited` row is written with no changes and `beforeUnavailable: true`, so the edit itself is never lost. That row is the evidence, so the failure is logged at Error but not counted in health, which would add an `AuditGap` for a row that exists. A missing form or record, or a record that belongs to another form, is logged at Warning only: Forms answers those requests with 404 itself (R54).
   - Two people editing the same entry at the same time can produce a before value that the other person had already changed, because each request reads the stored values before its own save and Forms itself lets the last save win.
 - Handler steps:
@@ -713,8 +713,8 @@ Extend the existing daily `AuditRetentionJob` rather than adding a second job. S
    - `Masked` is true;
    - the field is marked sensitive **now** (it may have been flagged after the edit);
    - the field no longer exists on the form, or the form cannot be loaded.
-   - Only a viewer with Forms' "view sensitive data" permission sees past the second and third conditions. (architect's call: the log must not show more than Forms itself would) `[unverified]`: how Forms exposes that permission check is an S4 output.
-   - **Fallback if S4 finds no public check** (architect's call): under `MaskSensitive` and `None` nothing changes for new rows. Under `All`, the API returns sensitive values only to users in an access-log group, and the README says that `All` gives those groups sight of sensitive edit values. The "field deleted or form gone" rule still masks. Do not reimplement Forms' permission logic.
+   - Only a viewer with Umbraco's sensitive-data permission (`HasAccessToSensitiveData`, the built-in Sensitive data group) sees past the second and third conditions. (architect's call: the log must not show more than Forms itself would.) S4 confirmed the check; there is no fallback.
+   - This holds under every `StoreEditValues` mode, `All` included: being in an access-log group does not unmask a sensitive value. Known non-sensitive fields show to everyone who can read the row.
 6. **Response headers:** `Cache-Control: no-store` on `access/{id}`, `access/records/{recordId}` and `access/export` (SEC-L4).
 
 - `admin` is the alias of Umbraco's built-in Administrators group `[ESTABLISHED]`. The check uses group aliases, not names.

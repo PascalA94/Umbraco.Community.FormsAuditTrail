@@ -17,7 +17,7 @@ public class FormFieldInfoProviderTests
         Guid formId = Guid.NewGuid();
         _forms.Get(formId).Returns((Form?)null);
 
-        Assert.Empty(new FormFieldInfoProvider(_forms, NullLogger<FormFieldInfoProvider>.Instance).GetFields(formId));
+        Assert.Empty(new FormFieldInfoProvider(new RequestFormCache(_forms), NullLogger<FormFieldInfoProvider>.Instance).GetFields(formId));
     }
 
     [Fact]
@@ -26,7 +26,7 @@ public class FormFieldInfoProviderTests
         Guid formId = Guid.NewGuid();
         _forms.Get(formId).Returns(_ => throw new InvalidOperationException("db down"));
 
-        Assert.Empty(new FormFieldInfoProvider(_forms, NullLogger<FormFieldInfoProvider>.Instance).GetFields(formId));
+        Assert.Empty(new FormFieldInfoProvider(new RequestFormCache(_forms), NullLogger<FormFieldInfoProvider>.Instance).GetFields(formId));
     }
 
     [Fact]
@@ -42,9 +42,39 @@ public class FormFieldInfoProviderTests
         };
         _forms.Get(formId).Returns(form);
 
-        var fields = new FormFieldInfoProvider(_forms, NullLogger<FormFieldInfoProvider>.Instance).GetFields(formId);
+        var fields = new FormFieldInfoProvider(new RequestFormCache(_forms), NullLogger<FormFieldInfoProvider>.Instance).GetFields(formId);
 
         Assert.Equal(new FieldInfo("Email", true), fields[email.Id]);
         Assert.Equal(new FieldInfo("Name", false), fields[name.Id]);
+    }
+
+    [Fact]
+    public void LoadedFields_FormNotYetRead_ReturnsEmptyWithoutReadingTheDatabase() // @M3-T13b SQLite create hang
+    {
+        Guid formId = Guid.NewGuid();
+
+        var fields = new FormFieldInfoProvider(new RequestFormCache(_forms), NullLogger<FormFieldInfoProvider>.Instance).GetLoadedFields(formId);
+
+        Assert.Empty(fields);
+        Assert.Empty(_forms.ReceivedCalls());
+    }
+
+    [Fact]
+    public void LoadedFields_FormAlreadyRead_ReturnsItsFieldsWithoutAnotherRead() // @M3-T13b SQLite create hang
+    {
+        Guid formId = Guid.NewGuid();
+        var email = new Field { Id = Guid.NewGuid(), Caption = "Email", ContainsSensitiveData = true };
+        _forms.Get(formId).Returns(new Form
+        {
+            Id = formId,
+            Pages = [new Page { FieldSets = [new FieldSet { Containers = [new FieldsetContainer { Fields = [email] }] }] }],
+        });
+        var cache = new RequestFormCache(_forms);
+        cache.Get(formId);
+
+        var fields = new FormFieldInfoProvider(cache, NullLogger<FormFieldInfoProvider>.Instance).GetLoadedFields(formId);
+
+        Assert.Equal(new FieldInfo("Email", true), fields[email.Id]);
+        _forms.Received(1).Get(formId);
     }
 }

@@ -89,6 +89,11 @@ export function auditRootView(
   };
 }
 
+/** Event raised by the Entry access cell; the root listens for it to switch to Entry history. */
+export function openHistoryEvent(recordId: string): CustomEvent<{ recordId: string }> {
+  return new CustomEvent('open-record-history', { detail: { recordId }, bubbles: true, composed: true });
+}
+
 /** The record id carried by an `open-record-history` event: a GUID or nothing (SEC-I2). */
 export function openHistoryTarget(detail: unknown): string | null {
   const id = (detail as { recordId?: unknown } | null | undefined)?.recordId;

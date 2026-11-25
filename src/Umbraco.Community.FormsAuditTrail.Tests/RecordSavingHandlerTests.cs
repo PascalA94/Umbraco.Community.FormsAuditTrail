@@ -34,7 +34,7 @@ public sealed class RecordSavingHandlerTests : IDisposable
 
     public RecordSavingHandlerTests()
     {
-        _fields.GetFields(FormId).Returns(new Dictionary<Guid, FieldInfo>
+        _fields.GetLoadedFields(FormId).Returns(new Dictionary<Guid, FieldInfo>
         {
             [Name] = new("Name", false),
             [Email] = new("Email", true),
@@ -99,7 +99,7 @@ public sealed class RecordSavingHandlerTests : IDisposable
         Handle(Saved(0, (Name, ["SENTINEL-FRONTEND"])));
 
         Assert.Null(_collector.Window);
-        _fields.DidNotReceive().GetFields(Arg.Any<Guid>());
+        _fields.DidNotReceive().GetLoadedFields(Arg.Any<Guid>());
     }
 
     [Fact]
@@ -166,6 +166,21 @@ public sealed class RecordSavingHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Saving_Edited_FormNotLoaded_MaskSensitive_MasksBothValues() // @M3-T13b SQLite create hang
+    {
+        // The filter could not read the form, so no field is known to be non-sensitive: fail closed.
+        _fields.GetLoadedFields(FormId).Returns(new Dictionary<Guid, FieldInfo>());
+        _options.EntryAudit.StoreEditValues = StoreEditValuesMode.MaskSensitive;
+        OpenEdited((Name, ["old"]));
+
+        Handle(Saved(5, (Name, ["new"])));
+
+        EntryFieldChange change = Assert.Single(_collector.Window!.Changes);
+        Assert.Equal(EntryEditDiffer.MaskedValue, change.OldValue);
+        Assert.Equal(EntryEditDiffer.MaskedValue, change.NewValue);
+    }
+
+    [Fact]
     public void Saving_DifferentRecordThanWindow_DoesNothing() // @M3-T13b
     {
         OpenEdited((Name, ["old"]));
@@ -219,9 +234,33 @@ public sealed class RecordSavingHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Saving_Created_AsksOnlyForFieldsAlreadyLoaded_NeverReadsTheForm() // @M3-T13b SQLite create hang
+    {
+        _collector.Open(AccessEventType.Created, FormId, null, new EntryAuditDetail());
+
+        Handle(Saved(0, (Name, ["x"])));
+
+        // GetFields would go to IFormService.Get inside Forms' save scope, where a read opens the SQLite snapshot that
+        // a concurrent commit then turns into an unrecoverable 'database is locked' on Forms' INSERT.
+        _fields.DidNotReceive().GetFields(Arg.Any<Guid>());
+        _fields.Received().GetLoadedFields(FormId);
+    }
+
+    [Fact]
+    public void Saving_Edited_AsksOnlyForFieldsAlreadyLoaded_NeverReadsTheForm() // @M3-T13b SQLite create hang
+    {
+        OpenEdited((Name, ["old"]));
+
+        Handle(Saved(5, (Name, ["new"])));
+
+        _fields.DidNotReceive().GetFields(Arg.Any<Guid>());
+        _fields.Received().GetLoadedFields(FormId);
+    }
+
+    [Fact]
     public void Saving_FieldProviderThrows_NoThrow() // @M3-T13b E12
     {
-        _fields.GetFields(Arg.Any<Guid>()).Returns(_ => throw new InvalidOperationException("forms down"));
+        _fields.GetLoadedFields(Arg.Any<Guid>()).Returns(_ => throw new InvalidOperationException("forms down"));
         OpenEdited((Name, ["old"]));
 
         Handle(Saved(5, (Name, ["new"])));

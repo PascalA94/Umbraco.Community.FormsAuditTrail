@@ -1,6 +1,6 @@
 import { umbExtensionsRegistry as ce } from "@umbraco-cms/backoffice/extension-registry";
 import { UmbLitElement as D } from "@umbraco-cms/backoffice/lit-element";
-import { css as E, property as S, state as a, customElement as C, html as o, nothing as u } from "@umbraco-cms/backoffice/external/lit";
+import { css as E, property as S, state as a, customElement as C, html as s, nothing as u } from "@umbraco-cms/backoffice/external/lit";
 import { UMB_AUTH_CONTEXT as A } from "@umbraco-cms/backoffice/auth";
 import { UMB_CURRENT_USER_CONTEXT as de } from "@umbraco-cms/backoffice/current-user";
 const he = [
@@ -113,10 +113,10 @@ async function $e(e, t) {
   const r = new URLSearchParams();
   return e.formId && r.set("formId", e.formId), e.page && r.set("page", String(e.page)), e.pageSize && r.set("pageSize", String(e.pageSize)), e.userKey && r.set("userKey", e.userKey), e.eventType !== void 0 && r.set("eventType", String(e.eventType)), e.fromDate && r.set("fromDate", e.fromDate), e.toDate && r.set("toDate", e.toDate), $(`${f}/entries?${r}`, t);
 }
-async function we(e, t) {
+async function xe(e, t) {
   return $(`${f}/entries/${e}`, t);
 }
-async function xe(e) {
+async function we(e) {
   return $(`${f}/forms`, e);
 }
 async function Te(e) {
@@ -131,9 +131,9 @@ async function Ee(e, t) {
   e.formId && r.set("formId", e.formId), e.userKey && r.set("userKey", e.userKey), e.eventType !== void 0 && r.set("eventType", String(e.eventType)), e.fromDate && r.set("fromDate", e.fromDate), e.toDate && r.set("toDate", e.toDate);
   const i = {};
   t && (i.Authorization = `Bearer ${t}`);
-  const s = await fetch(`${f}/entries/export?${r}`, { credentials: "include", headers: i });
-  if (!s.ok) throw new Error(`HTTP ${s.status}`);
-  Y(await s.blob(), `forms-audit-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`);
+  const o = await fetch(`${f}/entries/export?${r}`, { credentials: "include", headers: i });
+  if (!o.ok) throw new Error(`HTTP ${o.status}`);
+  Y(await o.blob(), `forms-audit-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`);
 }
 function ee(e) {
   const t = new URLSearchParams();
@@ -151,9 +151,9 @@ async function Ce(e, t) {
   if (r === null) throw new Error("Record id must be a GUID");
   const i = {};
   t && (i.Authorization = `Bearer ${t}`);
-  const s = await fetch(`${f}/access/records/${encodeURIComponent(r)}`, { credentials: "include", headers: i });
-  if (!s.ok) throw new Error(`HTTP ${s.status}`);
-  return { items: await s.json(), truncatedHeader: s.headers?.get("X-FormsAuditTrail-Truncated") ?? null };
+  const o = await fetch(`${f}/access/records/${encodeURIComponent(r)}`, { credentials: "include", headers: i });
+  if (!o.ok) throw new Error(`HTTP ${o.status}`);
+  return { items: await o.json(), truncatedHeader: o.headers?.get("X-FormsAuditTrail-Truncated") ?? null };
 }
 async function Se(e) {
   return $(`${f}/access/forms`, e);
@@ -165,14 +165,14 @@ function Ae(e) {
   const t = ee(e).toString();
   return t ? `${f}/access/export?${t}` : `${f}/access/export`;
 }
-async function Ue(e, t) {
+async function ke(e, t) {
   const r = {};
   t && (r.Authorization = `Bearer ${t}`);
   const i = await fetch(Ae(e), { credentials: "include", headers: r });
   if (!i.ok) throw new Error(`HTTP ${i.status}`);
   Y(await i.blob(), `forms-access-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv`);
 }
-const ke = "Entry auditing is switched off. Set FormsAuditTrail:EntryAudit:Enabled to true.", ie = (e) => `formsAuditTrail.gdprNotice.${e}`;
+const Ue = "Entry auditing is switched off. Set FormsAuditTrail:EntryAudit:Enabled to true.", ie = (e) => `formsAuditTrail.gdprNotice.${e}`;
 function Ne(e) {
   const t = e.storeEditValues;
   return t == null ? !0 : t === 0 || typeof t == "string" && t.toLowerCase() === "none";
@@ -196,25 +196,28 @@ function Fe(e, t) {
     }
 }
 function z(e, t, r, i) {
-  const s = e.canReadAccessLog === !0, n = s ? ["formChanges", "entryAccess", "entryHistory"] : ["formChanges"], l = s ? m(t.searchParams.get("recordId")) : null, U = [];
-  if (s) {
+  const o = e.canReadAccessLog === !0, n = o ? ["formChanges", "entryAccess", "entryHistory"] : ["formChanges"], l = o ? m(t.searchParams.get("recordId")) : null, k = [];
+  if (o) {
     const O = ye(e);
-    O && U.push(O);
-    for (const ue of e.offPeriods ?? []) U.push(be(ue));
+    O && k.push(O);
+    for (const ue of e.offPeriods ?? []) k.push(be(ue));
     const L = Re(e);
-    L && U.push(L);
+    L && k.push(L);
   }
   return {
     tabs: n,
     initialTab: l ? "entryHistory" : "formChanges",
-    offMessage: s && e.entryAuditEnabled === !1 ? ke : null,
-    bannerLines: U,
+    offMessage: o && e.entryAuditEnabled === !1 ? Ue : null,
+    bannerLines: k,
     // Not shown until the current user key has resolved: the dismissal is stored per user.
-    showGdprNotice: s && e.entryAuditEnabled === !0 && i !== "" && !Pe(r, i),
+    showGdprNotice: o && e.entryAuditEnabled === !0 && i !== "" && !Pe(r, i),
     deepLinkRecordId: l
   };
 }
 function Oe(e) {
+  return new CustomEvent("open-record-history", { detail: { recordId: e }, bubbles: !0, composed: !0 });
+}
+function Le(e) {
   const t = e?.recordId;
   return typeof t == "string" ? m(t) : null;
 }
@@ -257,10 +260,10 @@ const F = E`
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
   }
 `;
-var Le = Object.defineProperty, He = Object.getOwnPropertyDescriptor, w = (e, t, r, i) => {
-  for (var s = i > 1 ? void 0 : i ? He(t, r) : t, n = e.length - 1, l; n >= 0; n--)
-    (l = e[n]) && (s = (i ? l(t, r, s) : l(s)) || s);
-  return i && s && Le(t, r, s), s;
+var He = Object.defineProperty, Ve = Object.getOwnPropertyDescriptor, x = (e, t, r, i) => {
+  for (var o = i > 1 ? void 0 : i ? Ve(t, r) : t, n = e.length - 1, l; n >= 0; n--)
+    (l = e[n]) && (o = (i ? l(t, r, o) : l(o)) || o);
+  return i && o && He(t, r, o), o;
 };
 let y = class extends D {
   constructor() {
@@ -289,16 +292,16 @@ let y = class extends D {
     }
   }
   _renderAccess(e) {
-    return o`
+    return s`
       <h3 id="access-heading" tabindex="-1">Changes to ${e.formName}, ${b(e.timestamp)} UTC by ${e.userName}</h3>
-      ${e.changes.length === 0 ? o`<p>No field values were stored for this edit.</p>` : o`
+      ${e.changes.length === 0 ? s`<p>No field values were stored for this edit.</p>` : s`
             <uui-table aria-label="Field changes">
               <uui-table-head>
                 <uui-table-head-cell>Field</uui-table-head-cell>
                 <uui-table-head-cell>Before</uui-table-head-cell>
                 <uui-table-head-cell>After</uui-table-head-cell>
               </uui-table-head>
-              ${e.changes.map((t) => o`
+              ${e.changes.map((t) => s`
                 <uui-table-row>
                   <uui-table-cell>${t.fieldCaption}</uui-table-cell>
                   <uui-table-cell>${j(t.oldValue, t.masked, t.valuesScrubbedAt, !1)}</uui-table-cell>
@@ -314,7 +317,7 @@ let y = class extends D {
       this._loading = !0, this._error = void 0;
       try {
         const e = await this._authContext?.getLatestToken() ?? void 0;
-        this._entry = await we(this.entryId, e);
+        this._entry = await xe(this.entryId, e);
       } catch (e) {
         this._error = String(e), console.error("[audit-diff-viewer] Failed to load entry", this.entryId, e);
       } finally {
@@ -345,31 +348,31 @@ let y = class extends D {
     return e;
   }
   render() {
-    return o`
+    return s`
       <div role="status" aria-live="polite" class="sr-only">${this._loading ? "Loading changes" : ""}</div>
-      ${this._loading ? o`<uui-loader></uui-loader>` : this._body()}
+      ${this._loading ? s`<uui-loader></uui-loader>` : this._body()}
     `;
   }
   _body() {
-    if (this._error) return o`<uui-tag color="danger" role="alert">Error: ${this._error}</uui-tag>`;
+    if (this._error) return s`<uui-tag color="danger" role="alert">Error: ${this._error}</uui-tag>`;
     if (this.accessId !== void 0)
-      return this._access ? this._renderAccess(this._access) : o`<p>Loading changes…</p>`;
-    if (!this._entry) return o`<p>Loading entry ${this.entryId}…</p>`;
+      return this._access ? this._renderAccess(this._access) : s`<p>Loading changes…</p>`;
+    if (!this._entry) return s`<p>Loading entry ${this.entryId}…</p>`;
     const e = this._entry, t = this._groupByCategory();
-    return o`
+    return s`
       <p><strong>Date:</strong> ${new Date(e.timestamp).toLocaleString()} &nbsp; <strong>User:</strong> ${e.userName}</p>
 
-      ${t.size === 0 ? o`<uui-box><p>No field-level changes recorded.</p></uui-box>` : Array.from(t.entries()).map(([r, i]) => o`
+      ${t.size === 0 ? s`<uui-box><p>No field-level changes recorded.</p></uui-box>` : Array.from(t.entries()).map(([r, i]) => s`
             <uui-box headline=${r}>
-              ${i.map((s) => o`
+              ${i.map((o) => s`
                 <div class="change-row">
-                  <uui-tag look=${this._badgeColor(s.changeType)} color=${this._badgeColor(s.changeType)}>${s.changeType}</uui-tag>
-                  <span class="description">${s.friendlyDescription}</span>
-                  ${s.oldValue || s.newValue ? o`
+                  <uui-tag look=${this._badgeColor(o.changeType)} color=${this._badgeColor(o.changeType)}>${o.changeType}</uui-tag>
+                  <span class="description">${o.friendlyDescription}</span>
+                  ${o.oldValue || o.newValue ? s`
                     <span class="values">
-                      ${s.oldValue ? o`<del>${s.oldValue}</del>` : ""}
-                      ${s.oldValue && s.newValue ? o` → ` : ""}
-                      ${s.newValue ? o`<ins>${s.newValue}</ins>` : ""}
+                      ${o.oldValue ? s`<del>${o.oldValue}</del>` : ""}
+                      ${o.oldValue && o.newValue ? s` → ` : ""}
+                      ${o.newValue ? s`<ins>${o.newValue}</ins>` : ""}
                     </span>
                   ` : ""}
                 </div>
@@ -380,7 +383,7 @@ let y = class extends D {
       <uui-button @click=${() => this._showRaw = !this._showRaw}>
         ${this._showRaw ? "Hide" : "Show"} raw JSON
       </uui-button>
-      ${this._showRaw ? o`
+      ${this._showRaw ? s`
         <details open>
           <summary>Before</summary>
           <pre>${e.beforeSnapshot}</pre>
@@ -409,34 +412,34 @@ y.styles = [F, E`
     uui-table { width: 100%; }
     pre { background: var(--uui-color-surface-alt, #f5f5f5); padding: 12px; overflow: auto; font-size: 0.8em; }
   `];
-w([
+x([
   S({ type: Number })
 ], y.prototype, "entryId", 2);
-w([
+x([
   S({ type: Number })
 ], y.prototype, "accessId", 2);
-w([
+x([
   a()
 ], y.prototype, "_access", 2);
-w([
+x([
   a()
 ], y.prototype, "_entry", 2);
-w([
+x([
   a()
 ], y.prototype, "_loading", 2);
-w([
+x([
   a()
 ], y.prototype, "_showRaw", 2);
-w([
+x([
   a()
 ], y.prototype, "_error", 2);
-y = w([
+y = x([
   C("audit-diff-viewer")
 ], y);
-var Ve = Object.defineProperty, Ke = Object.getOwnPropertyDescriptor, p = (e, t, r, i) => {
-  for (var s = i > 1 ? void 0 : i ? Ke(t, r) : t, n = e.length - 1, l; n >= 0; n--)
-    (l = e[n]) && (s = (i ? l(t, r, s) : l(s)) || s);
-  return i && s && Ve(t, r, s), s;
+var Ke = Object.defineProperty, je = Object.getOwnPropertyDescriptor, p = (e, t, r, i) => {
+  for (var o = i > 1 ? void 0 : i ? je(t, r) : t, n = e.length - 1, l; n >= 0; n--)
+    (l = e[n]) && (o = (i ? l(t, r, o) : l(o)) || o);
+  return i && o && Ke(t, r, o), o;
 };
 const M = [
   { value: "", label: "All time", days: void 0 },
@@ -445,7 +448,7 @@ const M = [
   { value: "30", label: "Last 30 days", days: 30 },
   { value: "custom", label: "Custom", days: void 0 }
 ];
-function je(e) {
+function ze(e) {
   const t = /* @__PURE__ */ new Date();
   return t.setDate(t.getDate() - e), t.toISOString().slice(0, 10);
 }
@@ -457,14 +460,14 @@ let d = class extends D {
     super.connectedCallback(), this.consumeContext(A, async (e) => {
       if (!e) return;
       this._authContext = e;
-      const t = await this._getToken(), [r, i, s] = await Promise.all([xe(t), Te(t), Q(t)]);
-      this._forms = r, this._users = i, this._csvExportEnabled = s.csvExportEnabled, await this._load();
+      const t = await this._getToken(), [r, i, o] = await Promise.all([we(t), Te(t), Q(t)]);
+      this._forms = r, this._users = i, this._csvExportEnabled = o.csvExportEnabled, await this._load();
     });
   }
   _onPresetChange(e) {
     if (this._datePreset = e, e === "custom") return;
     const t = M.find((r) => r.value === e);
-    this._fromDate = t?.days !== void 0 ? je(t.days) : "", this._toDate = "", this._onFilterChange();
+    this._fromDate = t?.days !== void 0 ? ze(t.days) : "", this._toDate = "", this._onFilterChange();
   }
   async _getToken() {
     return P(this._authContext);
@@ -495,7 +498,7 @@ let d = class extends D {
     this._page = e.detail.value, this._load();
   }
   render() {
-    return o`
+    return s`
       <uui-box headline="Forms Audit Trail">
         <!-- Filter bar -->
         <div class="filters">
@@ -505,7 +508,7 @@ let d = class extends D {
       this._selectedFormId = e.target.value, this._onFilterChange();
     }}>
               <option value="">All forms</option>
-              ${this._forms.map((e) => o`<option value=${e.formId} ?selected=${e.formId === this._selectedFormId}>${e.formName}</option>`)}
+              ${this._forms.map((e) => s`<option value=${e.formId} ?selected=${e.formId === this._selectedFormId}>${e.formName}</option>`)}
             </select>
           </label>
 
@@ -527,18 +530,18 @@ let d = class extends D {
       this._selectedUserKey = e.target.value, this._onFilterChange();
     }}>
               <option value="" ?selected=${this._selectedUserKey === ""}>All users</option>
-              ${this._users.map((e) => o`<option value=${e.userKey} ?selected=${e.userKey === this._selectedUserKey}>${e.userName}</option>`)}
+              ${this._users.map((e) => s`<option value=${e.userKey} ?selected=${e.userKey === this._selectedUserKey}>${e.userName}</option>`)}
             </select>
           </label>
 
           <label class="date-label">
             Date range
             <select .value=${this._datePreset} @change=${(e) => this._onPresetChange(e.target.value)}>
-              ${M.map((e) => o`<option value=${e.value} ?selected=${e.value === this._datePreset}>${e.label}</option>`)}
+              ${M.map((e) => s`<option value=${e.value} ?selected=${e.value === this._datePreset}>${e.label}</option>`)}
             </select>
           </label>
 
-          ${this._datePreset === "custom" ? o`
+          ${this._datePreset === "custom" ? s`
             <label class="date-label">
               From
               <input type="date"
@@ -556,7 +559,7 @@ let d = class extends D {
     }} />
             </label>
           ` : ""}
-          ${this._csvExportEnabled ? o`
+          ${this._csvExportEnabled ? s`
             <uui-button class="export-link" look="outline" @click=${async () => {
       const e = await this._getToken();
       await Ee({
@@ -570,7 +573,7 @@ let d = class extends D {
           ` : ""}
         </div>
 
-        ${this._loading ? o`<uui-loader></uui-loader>` : this._entries.length === 0 ? o`<div class="empty-state"><uui-icon name="icon-info"></uui-icon><p>No audit entries found.</p></div>` : o`
+        ${this._loading ? s`<uui-loader></uui-loader>` : this._entries.length === 0 ? s`<div class="empty-state"><uui-icon name="icon-info"></uui-icon><p>No audit entries found.</p></div>` : s`
                 <uui-table>
                   <uui-table-head>
                     <uui-table-head-cell>Date / Time</uui-table-head-cell>
@@ -579,7 +582,7 @@ let d = class extends D {
                     <uui-table-head-cell>Event</uui-table-head-cell>
                     <uui-table-head-cell>Summary</uui-table-head-cell>
                   </uui-table-head>
-                  ${this._entries.map((e) => o`
+                  ${this._entries.map((e) => s`
                     <uui-table-row
                       selectable
                       ?selected=${this._selectedEntryId === e.id}
@@ -605,7 +608,7 @@ let d = class extends D {
               `}
       </uui-box>
 
-      ${this._selectedEntryId !== void 0 ? o`
+      ${this._selectedEntryId !== void 0 ? s`
         <uui-box headline="Change Detail">
           <audit-diff-viewer .entryId=${this._selectedEntryId}></audit-diff-viewer>
         </uui-box>
@@ -700,7 +703,7 @@ p([
 d = p([
   C("forms-audit-dashboard")
 ], d);
-const ze = [
+const qe = [
   {
     value: 10,
     name: "ListViewed"
@@ -762,7 +765,7 @@ const ze = [
     name: "AuditGap"
   }
 ];
-function se(e) {
+function oe(e) {
   if (!e) return null;
   try {
     const t = JSON.parse(e);
@@ -771,7 +774,7 @@ function se(e) {
     return null;
   }
 }
-function x(e, t) {
+function w(e, t) {
   const r = Object.keys(e).find((i) => i.toLowerCase() === t.toLowerCase());
   return r === void 0 ? void 0 : e[r];
 }
@@ -781,63 +784,63 @@ function T(e) {
 function B(e) {
   return e.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 }
-function qe(e) {
+function Me(e) {
   if (e === null || typeof e != "object" || Array.isArray(e)) return null;
   const t = [];
   for (const [r, i] of Object.entries(e))
     i === !0 ? t.push(B(r)) : T(i) !== null && t.push(`${B(r)}: ${T(i)}`);
   return t.length > 0 ? t.join(", ") : null;
 }
-function Me(e) {
-  const t = se(e.detail);
-  if (!t) return [];
-  const r = [], i = qe(x(t, "filter"));
-  i && r.push(`Filter: ${i}`);
-  const s = T(x(t, "exportType"));
-  s && r.push(`Export type: ${s}`);
-  const n = T(x(t, "fileName"));
-  n && r.push(`File name: ${n}`);
-  const l = T(x(t, "page"));
-  return l && r.push(`Page: ${l}`), x(t, "truncated") === !0 && r.push("Detail was truncated"), r;
-}
 function Be(e) {
-  const t = se(e.detail);
+  const t = oe(e.detail);
+  if (!t) return [];
+  const r = [], i = Me(w(t, "filter"));
+  i && r.push(`Filter: ${i}`);
+  const o = T(w(t, "exportType"));
+  o && r.push(`Export type: ${o}`);
+  const n = T(w(t, "fileName"));
+  n && r.push(`File name: ${n}`);
+  const l = T(w(t, "page"));
+  return l && r.push(`Page: ${l}`), w(t, "truncated") === !0 && r.push("Detail was truncated"), r;
+}
+function Ge(e) {
+  const t = oe(e.detail);
   if (!t) return null;
-  const r = T(x(t, "subjectUserKey")), i = x(t, "eventType"), n = ae.find((l) => l.value === i)?.label ?? T(i);
+  const r = T(w(t, "subjectUserKey")), i = w(t, "eventType"), n = ae.find((l) => l.value === i)?.label ?? T(i);
   return r || n ? { userKey: r, eventType: n } : null;
 }
-function Ge(e, t) {
+function We(e, t) {
   const r = e.find((i) => i.userKey.toLowerCase() === t.toLowerCase());
   return r ? r.currentUserName ?? r.userName : t;
 }
-function oe(e, t) {
-  const r = Me(e), i = e.eventType === "AuditSearched" || e.eventType === "AuditExported" ? Be(e) : null;
-  return i?.userKey && r.push(`Filtered by user: ${Ge(t, i.userKey)}`), i?.eventType && r.push(`Filtered by event type: ${i.eventType}`), r;
+function se(e, t) {
+  const r = Be(e), i = e.eventType === "AuditSearched" || e.eventType === "AuditExported" ? Ge(e) : null;
+  return i?.userKey && r.push(`Filtered by user: ${We(t, i.userKey)}`), i?.eventType && r.push(`Filtered by event type: ${i.eventType}`), r;
 }
-function We(e) {
+function Je(e) {
   return typeof e == "string" && e.split(",").some((t) => t.trim() !== "");
 }
-function Je(e, t) {
-  return { items: e, truncated: We(t) };
+function Xe(e, t) {
+  return { items: e, truncated: Je(t) };
 }
-const ae = ze.map((e) => ({
+const ae = qe.map((e) => ({
   value: e.value,
   label: e.name
-})), ne = "Enter an entry id as a GUID, for example 3f2504e0-4f89-11d3-9a0c-0305e82c3301.", Xe = "The From date must not be later than the To date.";
-function Ze(e) {
+})), ne = "Enter an entry id as a GUID, for example 3f2504e0-4f89-11d3-9a0c-0305e82c3301.", Ze = "The From date must not be later than the To date.";
+function Qe(e) {
   return {
     recordId: e.recordId !== "" && m(e.recordId) === null ? ne : null,
     // ISO yyyy-mm-dd strings sort chronologically.
-    range: e.fromDate !== "" && e.toDate !== "" && e.fromDate > e.toDate ? Xe : null
+    range: e.fromDate !== "" && e.toDate !== "" && e.fromDate > e.toDate ? Ze : null
   };
 }
 function G(e) {
   return e.recordId !== null || e.range !== null;
 }
-var Qe = Object.defineProperty, Ye = Object.getOwnPropertyDescriptor, h = (e, t, r, i) => {
-  for (var s = i > 1 ? void 0 : i ? Ye(t, r) : t, n = e.length - 1, l; n >= 0; n--)
-    (l = e[n]) && (s = (i ? l(t, r, s) : l(s)) || s);
-  return i && s && Qe(t, r, s), s;
+var Ye = Object.defineProperty, et = Object.getOwnPropertyDescriptor, h = (e, t, r, i) => {
+  for (var o = i > 1 ? void 0 : i ? et(t, r) : t, n = e.length - 1, l; n >= 0; n--)
+    (l = e[n]) && (o = (i ? l(t, r, o) : l(o)) || o);
+  return i && o && Ye(t, r, o), o;
 };
 const W = 20;
 let c = class extends D {
@@ -894,38 +897,38 @@ let c = class extends D {
     return re(this.shadowRoot);
   }
   _issues() {
-    return Ze({ recordId: this._recordId, fromDate: this._fromDate, toDate: this._toDate });
+    return Qe({ recordId: this._recordId, fromDate: this._fromDate, toDate: this._toDate });
   }
   _openHistory(e) {
-    this.dispatchEvent(new CustomEvent("open-record-history", { detail: { recordId: e }, bubbles: !0, composed: !0 }));
+    this.dispatchEvent(Oe(e));
   }
   _entry(e) {
     const t = e.recordId ? m(e.recordId) : null;
-    return t ? o`<a
-      href=${`?recordId=${t}`}
-      @click=${(r) => {
-      r.preventDefault(), this._openHistory(t);
-    }}
-      >${V(e)}</a
-    >` : V(e);
+    return t ? s`<button
+      type="button"
+      class="link-button"
+      aria-label=${`Open history for entry ${t}`}
+      @click=${() => this._openHistory(t)}>
+      ${V(e)}
+    </button>` : V(e);
   }
   _detail(e) {
     if (e.eventType === "Edited")
-      return o`<uui-button
+      return s`<uui-button
         look="outline"
         compact
         label=${`View changes to ${e.formName} at ${b(e.timestamp)} UTC`}
         @click=${() => this._selectedAccessId = e.id}
         >View changes</uui-button
       >`;
-    const t = oe(e, this._users);
-    return t.length === 0 ? u : o`<ul class="lines">${t.map((r) => o`<li>${r}</li>`)}</ul>`;
+    const t = se(e, this._users);
+    return t.length === 0 ? u : s`<ul class="lines">${t.map((r) => s`<li>${r}</li>`)}</ul>`;
   }
   async _export() {
     if (!(G(this._issues()) || this._exporting)) {
       this._exporting = !0;
       try {
-        await Ue(this._filters(), await this._token());
+        await ke(this._filters(), await this._token());
       } catch (e) {
         this._error = "The CSV export failed.", console.error("[audit-access] CSV export failed", e);
       } finally {
@@ -935,17 +938,17 @@ let c = class extends D {
   }
   render() {
     const e = Math.max(1, Math.ceil(this._total / W)), t = this._issues(), r = this._exporting ? "Preparing the CSV export" : this._loading ? "Loading entry access" : `${this._total} matching rows`;
-    return o`
+    return s`
       <uui-box>
         <h2 slot="headline" id="heading" tabindex="-1">Entry access</h2>
-        ${this.config ? o`<p class="muted">${fe(this.config)}</p>` : u}
+        ${this.config ? s`<p class="muted">${fe(this.config)}</p>` : u}
         <div class="filters" role="search" aria-label="Entry access filters">
           <label class="field">Form
             <select @change=${(i) => {
       this._formId = i.target.value, this._filterChanged();
     }}>
               <option value="">All forms</option>
-              ${this._forms.map((i) => o`<option value=${i.formId} ?selected=${i.formId === this._formId}>${i.formName}</option>`)}
+              ${this._forms.map((i) => s`<option value=${i.formId} ?selected=${i.formId === this._formId}>${i.formName}</option>`)}
             </select>
           </label>
           <label class="field">User
@@ -953,7 +956,7 @@ let c = class extends D {
       this._userKey = i.target.value, this._filterChanged();
     }}>
               <option value="">All users</option>
-              ${this._users.map((i) => o`<option value=${i.userKey} ?selected=${i.userKey === this._userKey}>${i.currentUserName ?? i.userName}</option>`)}
+              ${this._users.map((i) => s`<option value=${i.userKey} ?selected=${i.userKey === this._userKey}>${i.currentUserName ?? i.userName}</option>`)}
             </select>
           </label>
           <label class="field">Event
@@ -961,7 +964,7 @@ let c = class extends D {
       this._eventType = i.target.value, this._filterChanged();
     }}>
               <option value="">All events</option>
-              ${ae.map((i) => o`<option value=${String(i.value)} ?selected=${String(i.value) === this._eventType}>${R(i.label).label}</option>`)}
+              ${ae.map((i) => s`<option value=${String(i.value)} ?selected=${String(i.value) === this._eventType}>${R(i.label).label}</option>`)}
             </select>
           </label>
           <label class="field">From
@@ -986,22 +989,22 @@ let c = class extends D {
               aria-describedby=${t.recordId ? "record-id-error" : u}
               @change=${(i) => this._onRecordIdChange(i.target.value)} />
           </label>
-          ${this.config?.entryAuditCsvEnabled ? o`<uui-button class="push-right" look="outline" label="Export CSV"
+          ${this.config?.entryAuditCsvEnabled ? s`<uui-button class="push-right" look="outline" label="Export CSV"
                 ?disabled=${G(t)} state=${this._exporting ? "waiting" : u}
                 @click=${() => this._export()}>Export CSV</uui-button>` : u}
         </div>
-        ${t.recordId ? o`<p id="record-id-error" class="error" role="alert">${t.recordId}</p>` : u}
-        ${t.range ? o`<p id="range-error" class="error" role="alert">${t.range}</p>` : u}
-        ${this._error ? o`<p class="error" role="alert">${this._error}</p>` : u}
+        ${t.recordId ? s`<p id="record-id-error" class="error" role="alert">${t.recordId}</p>` : u}
+        ${t.range ? s`<p id="range-error" class="error" role="alert">${t.range}</p>` : u}
+        ${this._error ? s`<p class="error" role="alert">${this._error}</p>` : u}
 
         <div role="status" aria-live="polite">
           <span class="sr-only">${r}</span>
-          ${!this._loading && this._rows.length === 0 ? o`<div class="empty-state"><uui-icon name="icon-info"></uui-icon><p>No entry access recorded for these filters.</p></div>` : u}
+          ${!this._loading && this._rows.length === 0 ? s`<div class="empty-state"><uui-icon name="icon-info"></uui-icon><p>No entry access recorded for these filters.</p></div>` : u}
         </div>
 
         <!-- The table and pager stay mounted while loading, so focus on the pager is not lost on a page change. -->
-        ${this._loading ? o`<uui-loader></uui-loader>` : u}
-        ${this._rows.length > 0 ? o`
+        ${this._loading ? s`<uui-loader></uui-loader>` : u}
+        ${this._rows.length > 0 ? s`
               <uui-table aria-label="Entry access log" aria-busy=${this._loading ? "true" : "false"}>
                 <uui-table-head>
                   <uui-table-head-cell>When (UTC)</uui-table-head-cell>
@@ -1012,12 +1015,12 @@ let c = class extends D {
                   <uui-table-head-cell>Detail</uui-table-head-cell>
                 </uui-table-head>
                 ${this._rows.map((i) => {
-      const s = R(i.eventType);
-      return o`
+      const o = R(i.eventType);
+      return s`
                     <uui-table-row>
                       <uui-table-cell>${b(i.timestamp)}</uui-table-cell>
                       <uui-table-cell>${Z(i)}</uui-table-cell>
-                      <uui-table-cell><uui-tag color=${s.color} look=${s.look}>${s.label}</uui-tag></uui-table-cell>
+                      <uui-table-cell><uui-tag color=${o.color} look=${o.look}>${o.label}</uui-tag></uui-table-cell>
                       <uui-table-cell>${i.formName}</uui-table-cell>
                       <uui-table-cell>${this._entry(i)}</uui-table-cell>
                       <uui-table-cell>${this._detail(i)}</uui-table-cell>
@@ -1026,7 +1029,7 @@ let c = class extends D {
     })}
               </uui-table>
             ` : u}
-        ${this._total > 0 ? o`<uui-pagination
+        ${this._total > 0 ? s`<uui-pagination
               label="Entry access pages"
               .total=${e}
               .current=${this._page}
@@ -1036,7 +1039,7 @@ let c = class extends D {
             ></uui-pagination>` : u}
       </uui-box>
 
-      ${this._selectedAccessId !== void 0 ? o`<uui-box headline="Change detail"><audit-diff-viewer .accessId=${this._selectedAccessId}></audit-diff-viewer></uui-box>` : u}
+      ${this._selectedAccessId !== void 0 ? s`<uui-box headline="Change detail"><audit-diff-viewer .accessId=${this._selectedAccessId}></audit-diff-viewer></uui-box>` : u}
     `;
   }
 };
@@ -1044,8 +1047,26 @@ c.styles = [
   F,
   E`
       uui-box + uui-box { margin-top: 16px; }
-      a { color: var(--uui-color-interactive); }
-      a:focus-visible { outline: 2px solid var(--uui-color-focus); outline-offset: 2px; }
+      .link-button { color: var(--uui-color-interactive); }
+      .link-button:focus-visible { outline: 2px solid var(--uui-color-focus); outline-offset: 2px; }
+      .link-button {
+        background: none;
+        border: 0;
+        padding: 0;
+        min-block-size: 24px;
+        display: inline-flex;
+        align-items: center;
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+        text-align: start;
+      }
+      .link-button:hover { color: var(--uui-color-interactive-emphasis); }
+      @media (forced-colors: active) {
+        .link-button { color: LinkText; }
+        .link-button:hover { color: LinkText; text-decoration-thickness: 2px; }
+        .link-button:focus-visible { outline-color: Highlight; }
+      }
     `
 ];
 h([
@@ -1099,12 +1120,12 @@ h([
 c = h([
   C("forms-audit-entry-access")
 ], c);
-var et = Object.defineProperty, tt = Object.getOwnPropertyDescriptor, g = (e, t, r, i) => {
-  for (var s = i > 1 ? void 0 : i ? tt(t, r) : t, n = e.length - 1, l; n >= 0; n--)
-    (l = e[n]) && (s = (i ? l(t, r, s) : l(s)) || s);
-  return i && s && et(t, r, s), s;
+var tt = Object.defineProperty, it = Object.getOwnPropertyDescriptor, g = (e, t, r, i) => {
+  for (var o = i > 1 ? void 0 : i ? it(t, r) : t, n = e.length - 1, l; n >= 0; n--)
+    (l = e[n]) && (o = (i ? l(t, r, o) : l(o)) || o);
+  return i && o && tt(t, r, o), o;
 };
-const it = "No recorded access for this entry, or you don't have access to its form.", rt = "Exports from some exporters don't record which entries they contained. See the Entry access log for all exports of this form.";
+const rt = "No recorded access for this entry, or you don't have access to its form.", ot = "Exports from some exporters don't record which entries they contained. See the Entry access log for all exports of this form.";
 let _ = class extends D {
   constructor() {
     super(...arguments), this.recordId = "", this._input = "", this._inputError = !1, this._rows = [], this._truncated = !1, this._loading = !1, this._searched = !1, this._users = [], this._requestId = 0;
@@ -1138,12 +1159,12 @@ let _ = class extends D {
     const t = ++this._requestId;
     this._loading = !0, this._message = void 0, this._truncated = !1, this._selectedAccessId = void 0, this._searched = !0;
     try {
-      const r = await Ce(e, await this._token()), i = Je(r.items, r.truncatedHeader);
+      const r = await Ce(e, await this._token()), i = Xe(r.items, r.truncatedHeader);
       if (t !== this._requestId) return;
       this._rows = i.items, this._truncated = i.truncated;
     } catch (r) {
       if (t !== this._requestId) return;
-      this._rows = [], this._message = String(r).includes("HTTP 404") ? it : "The entry history could not be loaded.", String(r).includes("HTTP 404") || console.error("[audit-history] Load failed", r);
+      this._rows = [], this._message = String(r).includes("HTTP 404") ? rt : "The entry history could not be loaded.", String(r).includes("HTTP 404") || console.error("[audit-history] Load failed", r);
     } finally {
       t === this._requestId && (this._loading = !1);
     }
@@ -1155,18 +1176,18 @@ let _ = class extends D {
   }
   _detail(e) {
     if (e.eventType === "Edited")
-      return o`<uui-button
+      return s`<uui-button
         look="outline"
         compact
         label=${`View changes at ${b(e.timestamp)} UTC`}
         @click=${() => this._selectedAccessId = e.id}
         >View changes</uui-button
       >`;
-    const t = oe(e, this._users);
-    return t.length === 0 ? u : o`<ul class="lines">${t.map((r) => o`<li>${r}</li>`)}</ul>`;
+    const t = se(e, this._users);
+    return t.length === 0 ? u : s`<ul class="lines">${t.map((r) => s`<li>${r}</li>`)}</ul>`;
   }
   render() {
-    return o`
+    return s`
       <uui-box>
         <h2 slot="headline" id="heading" tabindex="-1">Entry history</h2>
         <form class="filters" @submit=${(e) => this._submit(e)}>
@@ -1178,16 +1199,16 @@ let _ = class extends D {
           </label>
           <uui-button type="submit" look="primary" label="Show history">Show history</uui-button>
         </form>
-        ${this._inputError ? o`<p id="record-id-error" class="error" role="alert">${ne}</p>` : u}
+        ${this._inputError ? s`<p id="record-id-error" class="error" role="alert">${ne}</p>` : u}
 
         <div role="status" aria-live="polite">
-          ${this._loading ? o`<span class="sr-only">Loading entry history</span>` : u}
-          ${this._message ? o`<p class="error">${this._message}</p>` : u}
+          ${this._loading ? s`<span class="sr-only">Loading entry history</span>` : u}
+          ${this._message ? s`<p class="error">${this._message}</p>` : u}
           <p class="note">${this._truncated ? "This history is incomplete: the server limited how many rows it returned. Use the Entry access log to see the rest." : ""}</p>
-          ${!this._loading && !this._searched ? o`<div class="empty-state"><p>Enter an entry id to see who has viewed, changed or exported it.</p></div>` : u}
+          ${!this._loading && !this._searched ? s`<div class="empty-state"><p>Enter an entry id to see who has viewed, changed or exported it.</p></div>` : u}
         </div>
 
-        ${this._loading ? o`<uui-loader></uui-loader>` : this._rows.length > 0 ? o`
+        ${this._loading ? s`<uui-loader></uui-loader>` : this._rows.length > 0 ? s`
                 <uui-table aria-label="Entry history">
                   <uui-table-head>
                     <uui-table-head-cell>When (UTC)</uui-table-head-cell>
@@ -1198,7 +1219,7 @@ let _ = class extends D {
                   </uui-table-head>
                   ${this._rows.map((e) => {
       const t = R(e.eventType);
-      return o`
+      return s`
                       <uui-table-row>
                         <uui-table-cell>${b(e.timestamp)}</uui-table-cell>
                         <uui-table-cell>${Z(e)}</uui-table-cell>
@@ -1209,11 +1230,11 @@ let _ = class extends D {
                     `;
     })}
                 </uui-table>
-                <p class="note">${rt}</p>
+                <p class="note">${ot}</p>
               ` : u}
       </uui-box>
 
-      ${this._selectedAccessId !== void 0 ? o`<uui-box headline="Change detail"><audit-diff-viewer .accessId=${this._selectedAccessId}></audit-diff-viewer></uui-box>` : u}
+      ${this._selectedAccessId !== void 0 ? s`<uui-box headline="Change detail"><audit-diff-viewer .accessId=${this._selectedAccessId}></audit-diff-viewer></uui-box>` : u}
     `;
   }
 };
@@ -1251,26 +1272,26 @@ g([
 _ = g([
   C("forms-audit-entry-history")
 ], _);
-var st = Object.defineProperty, ot = Object.getOwnPropertyDescriptor, le = (e, t, r, i) => {
-  for (var s = i > 1 ? void 0 : i ? ot(t, r) : t, n = e.length - 1, l; n >= 0; n--)
-    (l = e[n]) && (s = (i ? l(t, r, s) : l(s)) || s);
-  return i && s && st(t, r, s), s;
+var st = Object.defineProperty, at = Object.getOwnPropertyDescriptor, le = (e, t, r, i) => {
+  for (var o = i > 1 ? void 0 : i ? at(t, r) : t, n = e.length - 1, l; n >= 0; n--)
+    (l = e[n]) && (o = (i ? l(t, r, o) : l(o)) || o);
+  return i && o && st(t, r, o), o;
 };
-let k = class extends D {
+let U = class extends D {
   constructor() {
     super(...arguments), this.lines = [];
   }
   render() {
-    return this.lines.length === 0 ? u : o`
+    return this.lines.length === 0 ? u : s`
       <uui-box role="alert">
         <ul>
-          ${this.lines.map((e) => o`<li>${e}</li>`)}
+          ${this.lines.map((e) => s`<li>${e}</li>`)}
         </ul>
       </uui-box>
     `;
   }
 };
-k.styles = E`
+U.styles = E`
     :host { display: block; margin-bottom: 16px; }
     uui-box {
       border-left: 4px solid var(--uui-color-danger);
@@ -1281,20 +1302,20 @@ k.styles = E`
   `;
 le([
   S({ attribute: !1 })
-], k.prototype, "lines", 2);
-k = le([
+], U.prototype, "lines", 2);
+U = le([
   C("audit-health-banner")
-], k);
-var at = Object.defineProperty, nt = Object.getOwnPropertyDescriptor, I = (e, t, r, i) => {
-  for (var s = i > 1 ? void 0 : i ? nt(t, r) : t, n = e.length - 1, l; n >= 0; n--)
-    (l = e[n]) && (s = (i ? l(t, r, s) : l(s)) || s);
-  return i && s && at(t, r, s), s;
+], U);
+var nt = Object.defineProperty, lt = Object.getOwnPropertyDescriptor, I = (e, t, r, i) => {
+  for (var o = i > 1 ? void 0 : i ? lt(t, r) : t, n = e.length - 1, l; n >= 0; n--)
+    (l = e[n]) && (o = (i ? l(t, r, o) : l(o)) || o);
+  return i && o && nt(t, r, o), o;
 };
 const J = {
   formChanges: "Form changes",
   entryAccess: "Entry access",
   entryHistory: "Entry history"
-}, lt = "Records backoffice activity only. Changes made by code, workflows, the Delivery API or directly in the database are not captured, and some Forms screens are not recorded. See the README.", ut = "https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail#gdpr";
+}, ut = "Records backoffice activity only. Changes made by code, workflows, the Delivery API or directly in the database are not captured, and some Forms screens are not recorded. See the README.", ct = "https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail#gdpr";
 function N() {
   try {
     return window.localStorage;
@@ -1305,7 +1326,7 @@ function N() {
 let v = class extends D {
   constructor() {
     super(...arguments), this._userKey = "", this._historyRecordId = "", this._noticeDismissed = !1, this._focusTarget = null, this._onOpenHistory = (e) => {
-      const t = Oe(e.detail);
+      const t = Le(e.detail);
       t && (this._historyRecordId = t, this._activeTab = "entryHistory", this._focusTarget = "panel");
     };
   }
@@ -1340,26 +1361,26 @@ let v = class extends D {
   _panel(e) {
     switch (e) {
       case "entryAccess":
-        return o`<forms-audit-entry-access .config=${this._config}></forms-audit-entry-access>`;
+        return s`<forms-audit-entry-access .config=${this._config}></forms-audit-entry-access>`;
       case "entryHistory":
-        return o`<forms-audit-entry-history .recordId=${this._historyRecordId}></forms-audit-entry-history>`;
+        return s`<forms-audit-entry-history .recordId=${this._historyRecordId}></forms-audit-entry-history>`;
       default:
-        return o`<forms-audit-dashboard></forms-audit-dashboard>`;
+        return s`<forms-audit-dashboard></forms-audit-dashboard>`;
     }
   }
   render() {
-    if (this._error) return o`<uui-box><p class="error" role="alert">${this._error}</p></uui-box>`;
-    if (!this._config) return o`<uui-loader></uui-loader>`;
+    if (this._error) return s`<uui-box><p class="error" role="alert">${this._error}</p></uui-box>`;
+    if (!this._config) return s`<uui-loader></uui-loader>`;
     const e = z(this._config, new URL(window.location.href), N(), this._userKey), t = this._activeTab && e.tabs.includes(this._activeTab) ? this._activeTab : e.initialTab, r = e.showGdprNotice && !this._noticeDismissed;
-    return o`
+    return s`
       <audit-health-banner .lines=${e.bannerLines}></audit-health-banner>
 
-      ${e.offMessage ? o`<uui-box class="gap" role="status"><p>${e.offMessage}</p></uui-box>` : u}
+      ${e.offMessage ? s`<uui-box class="gap" role="status"><p>${e.offMessage}</p></uui-box>` : u}
 
-      ${r ? o`
+      ${r ? s`
             <uui-box class="gap" role="status">
               <div class="notice">
-                <span>Entry auditing is now on. <a href=${ut} target="_blank" rel="noopener noreferrer">Read the GDPR notes.</a></span>
+                <span>Entry auditing is now on. <a href=${ct} target="_blank" rel="noopener noreferrer">Read the GDPR notes.</a></span>
                 <uui-button look="outline" label="Dismiss the GDPR notice" @click=${() => this._dismissNotice()}>Dismiss</uui-button>
               </div>
             </uui-box>
@@ -1367,7 +1388,7 @@ let v = class extends D {
 
       <uui-tab-group class="tabs" label="Audit sections">
         ${e.tabs.map(
-      (i) => o`
+      (i) => s`
             <uui-tab
               id=${`tab-${i}`}
               label=${J[i]}
@@ -1381,7 +1402,7 @@ let v = class extends D {
 
       <!-- The active tab is not in the URL, and only the active panel is mounted, so filters reset on a tab change. -->
       ${e.tabs.map(
-      (i) => o`
+      (i) => s`
           <div
             id=${`panel-${i}`}
             role="tabpanel"
@@ -1395,7 +1416,7 @@ let v = class extends D {
         `
     )}
 
-      <p class="footnote">${lt}</p>
+      <p class="footnote">${ut}</p>
     `;
   }
 };

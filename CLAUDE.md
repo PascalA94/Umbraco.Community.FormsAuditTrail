@@ -56,6 +56,9 @@ npm test             # Vitest
 # E2E (Playwright) against a running demo site. Copy .env.example to .env in the E2E folder and fill in the values:
 # E2E_BASE_URL, E2E_ADMIN_EMAIL/PASSWORD, E2E_EDITOR_EMAIL/PASSWORD, E2E_AUDITOR_EMAIL/PASSWORD, E2E_EXPECT_ACCESS_API.
 # The demo site's seeding and diagnostics are behind the E2E:Seed and E2E:Diagnostics settings, in Development only.
+# Run the site with FormsAuditTrail__EntryAudit__DeduplicateSeconds=0, Umbraco__CMS__Security__AllowConcurrentLogins=true
+# (a UI login otherwise revokes the fixtures' API session), Umbraco__Forms__Options__EnableFormsApi=true and
+# Umbraco__Forms__Security__EnableAntiForgeryTokenForFormsApi=false (the public-submit helper gets 403/400 without them).
 cd src/Umbraco.Community.FormsAuditTrail.E2E
 npm ci --ignore-scripts
 npm test

@@ -58,7 +58,12 @@ internal sealed class CaptureHarness : IDisposable
         services.AddSingleton(RecordStorage);
         services.AddSingleton(FormService);
         services.AddSingleton(Health);
-        services.AddScoped(_ => FieldInfo);
+        // The substitute by default; the real provider when a test sets UseRealFieldInfo, so it reads the same
+        // per-request form cache as the capture (perf-edit: one form read per edit).
+        services.AddScoped<IFormFieldInfoProvider>(sp => UseRealFieldInfo
+            ? new FormFieldInfoProvider(sp.GetRequiredService<RequestFormCache>(), NullLogger<FormFieldInfoProvider>.Instance)
+            : FieldInfo);
+        services.AddScoped<RequestFormCache>();
         // The in-request erasure scrub (Task 14). Without the real writer no audit database is registered, so a scrub
         // fails exactly as it would on a broken database, which the fail-open tests rely on.
         services.AddSingleton(TimeProvider.System);
@@ -66,7 +71,7 @@ internal sealed class CaptureHarness : IDisposable
         services.AddSingleton<DeletedRecordScrubber>();
         FormService.Get(Arg.Any<Guid>()).Returns(call => new Form { Id = call.Arg<Guid>() });
         RecordStorage.GetRecordByUniqueId(Arg.Any<Guid>(), Arg.Any<Form>()).Returns(_ => StoredRecord);
-        FieldInfo.GetFields(Arg.Any<Guid>()).Returns(new Dictionary<Guid, EntryAudit.FieldInfo>());
+        FieldInfo.GetLoadedFields(Arg.Any<Guid>()).Returns(new Dictionary<Guid, EntryAudit.FieldInfo>());
         if (captureUnavailable)
         {
             // Stands in for a broken registration or scope: resolving the capture throws.
@@ -124,6 +129,9 @@ internal sealed class CaptureHarness : IDisposable
     public IRecordStorage RecordStorage { get; } = Substitute.For<IRecordStorage>();
     public IFormService FormService { get; } = Substitute.For<IFormService>();
     public IFormFieldInfoProvider FieldInfo { get; } = Substitute.For<IFormFieldInfoProvider>();
+
+    /// <summary>Resolve the real <see cref="FormFieldInfoProvider"/> over <see cref="FormService"/> instead of <see cref="FieldInfo"/>.</summary>
+    public bool UseRealFieldInfo { get; set; }
     public EntryAuditHealth Health { get; } = new(Substitute.For<IAuditStateStore>(), TimeProvider.System);
 
     /// <summary>What the storage read returns: the entry as stored before the edit. Empty unless a test sets it.</summary>
