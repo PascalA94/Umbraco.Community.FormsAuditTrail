@@ -12,6 +12,7 @@ import type {
 import { downloadAccessCsv, getAccess, getAccessForms, getAccessUsers } from '../services/audit-api.service.js';
 import { ACCESS_EVENT_OPTIONS, accessDetailLines, exportBlocked, filterIssues } from '../utils/access-detail.js';
 import { entryCell, eventTag, parseRecordId, retentionBanner, userCell, utcDateTime } from '../utils/access-format.js';
+import { openHistoryEvent } from './audit-root.view.js';
 import { bearerToken, focusHeadingIn } from '../utils/view-helpers.js';
 import { auditSharedStyles } from '../styles/audit-shared.styles.js';
 import '../components/audit-diff-viewer.element.js';
@@ -112,20 +113,21 @@ export class EntryAccessViewElement extends UmbLitElement {
   }
 
   private _openHistory(recordId: string) {
-    this.dispatchEvent(new CustomEvent('open-record-history', { detail: { recordId }, bubbles: true, composed: true }));
+    this.dispatchEvent(openHistoryEvent(recordId));
   }
 
   private _entry(row: AccessEntryListDto) {
     const id = row.recordId ? parseRecordId(row.recordId) : null;
     if (!id) return entryCell(row);
-    return html`<a
-      href=${`?recordId=${id}`}
-      @click=${(e: MouseEvent) => {
-        e.preventDefault();
-        this._openHistory(id);
-      }}
-      >${entryCell(row)}</a
-    >`;
+    // A button, not an anchor: Umbraco's core router claims every anchor click that bubbles to the document and
+    // pushes the href onto history even after preventDefault, which sends the user out of the dashboard.
+    return html`<button
+      type="button"
+      class="link-button"
+      aria-label=${`Open history for entry ${id}`}
+      @click=${() => this._openHistory(id)}>
+      ${entryCell(row)}
+    </button>`;
   }
 
   private _detail(row: AccessEntryListDto) {
@@ -268,8 +270,26 @@ export class EntryAccessViewElement extends UmbLitElement {
     auditSharedStyles,
     css`
       uui-box + uui-box { margin-top: 16px; }
-      a { color: var(--uui-color-interactive); }
-      a:focus-visible { outline: 2px solid var(--uui-color-focus); outline-offset: 2px; }
+      .link-button { color: var(--uui-color-interactive); }
+      .link-button:focus-visible { outline: 2px solid var(--uui-color-focus); outline-offset: 2px; }
+      .link-button {
+        background: none;
+        border: 0;
+        padding: 0;
+        min-block-size: 24px;
+        display: inline-flex;
+        align-items: center;
+        font: inherit;
+        text-decoration: underline;
+        cursor: pointer;
+        text-align: start;
+      }
+      .link-button:hover { color: var(--uui-color-interactive-emphasis); }
+      @media (forced-colors: active) {
+        .link-button { color: LinkText; }
+        .link-button:hover { color: LinkText; text-decoration-thickness: 2px; }
+        .link-button:focus-visible { outline-color: Highlight; }
+      }
     `,
   ];
 }

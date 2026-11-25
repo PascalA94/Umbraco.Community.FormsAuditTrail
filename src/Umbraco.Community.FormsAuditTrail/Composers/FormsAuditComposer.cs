@@ -100,6 +100,8 @@ public class FormsAuditComposer : IComposer
         builder.Services.AddSingleton<DeletedRecordScrubber>();
 
         builder.Services.AddScoped<IFormFieldInfoProvider, FormFieldInfoProvider>();
+        // One form read per request for the capture, the field provider and the row's form name (perf-edit).
+        builder.Services.AddScoped<RequestFormCache>();
         // The final service collection is needed at started time, after every composer has run (S10), so the factory
         // captures the live collection rather than copying it now. The same instance doubles as the started handler.
         builder.Services.AddSingleton<IForeignValueHandlerDetector>(sp => new ForeignValueHandlerDetector(

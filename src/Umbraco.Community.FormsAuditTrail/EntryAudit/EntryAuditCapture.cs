@@ -7,7 +7,6 @@ using Umbraco.Community.FormsAuditTrail.Configuration;
 using Umbraco.Community.FormsAuditTrail.Models;
 using Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 using Umbraco.Forms.Core.Data.Storage;
-using Umbraco.Forms.Core.Services;
 using Umbraco.Forms.Web.Api.ManagementApi.Export;
 using Umbraco.Forms.Web.Api.ManagementApi.Record;
 using Umbraco.Forms.Web.Models.Backoffice;
@@ -36,7 +35,7 @@ internal sealed class EntryAuditCapture(
     IOptionsMonitor<FormsAuditTrailOptions> options,
     IBackOfficeSecurityAccessor securityAccessor,
     IRecordStorage recordStorage,
-    IFormService formService,
+    RequestFormCache forms,
     EntryAuditHealth health,
     ILogger<EntryAuditCapture> logger,
     DeletedRecordScrubber scrubber)
@@ -93,6 +92,10 @@ internal sealed class EntryAuditCapture(
             if (kind == AccessEventType.Edited)
             {
                 CaptureBeforeValues(formId, recordId);
+            }
+            else if (kind == AccessEventType.Created)
+            {
+                WarmForm(formId);
             }
 
             return true;
@@ -210,6 +213,29 @@ internal sealed class EntryAuditCapture(
     }
 
     /// <summary>
+    /// Reads the form of a backoffice create now, before the action, so <c>RecordSavingHandler</c> finds it cached. Its
+    /// captions need the definition, and reading it inside Forms' save scope put a SQLite read ahead of Forms' INSERT,
+    /// which a concurrent commit turned into a 'database is locked' hang. A failed read is not retried there: the
+    /// create is recorded with field ids in place of captions (E12).
+    /// </summary>
+    private void WarmForm(Guid? formId)
+    {
+        if (formId is not { } id)
+        {
+            return;
+        }
+
+        try
+        {
+            forms.Get(id);
+        }
+        catch (Exception ex)
+        {
+            SafeLog.Run(() => logger.LogWarning("FormsAuditTrail could not read form {FormId} before a create ({ExceptionType}); field captions fall back to ids.", id, ex.GetType().Name));
+        }
+    }
+
+    /// <summary>
     /// SEC-04: the stored values before an edit, read through Forms' <c>IRecordStorage</c> so any decrypting
     /// <c>RecordFetching</c> handler runs on them exactly as it does for Forms (S2, S10). Reading <c>UFRecords.RecordData</c>
     /// ourselves would bypass a site's at-rest encryption: every field would diff as changed and the decrypted after
@@ -231,7 +257,7 @@ internal sealed class EntryAuditCapture(
             {
                 missing = "no form or record id";
             }
-            else if (formService.Get(fid) is not { } form)
+            else if (forms.Get(fid) is not { } form)
             {
                 missing = "form not found";
             }
@@ -482,7 +508,11 @@ internal sealed class EntryAuditCapture(
                 break;
         }
 
-        return new AccessWrite(kind, formId, null, recordId, recordCount, userKey, userName, detail, recordIds, window.Changes.ToArray())
+        // An edit already read its form before the action; reusing that name spares the writer a second form read.
+        // Null for any form this request has not read, and the writer then looks the name up as before.
+        string? formName = formId != Guid.Empty && forms.GetLoaded(formId)?.Name is { Length: > 0 } loaded ? loaded : null;
+
+        return new AccessWrite(kind, formId, formName, recordId, recordCount, userKey, userName, detail, recordIds, window.Changes.ToArray())
         {
             DedupeFilterHash = dedupeHash,
             // Every unresolved user shares Guid.Empty, so a dedupe key would hide a second person behind the first.

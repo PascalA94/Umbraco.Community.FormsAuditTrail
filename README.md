@@ -254,7 +254,7 @@ The access log is personal data. It records the identity of your staff and what 
 - **Retention.** Access rows are deleted after `EntryAudit:RetentionDays` (default 365) and changed values are removed after `EditValueRetentionDays` (default 90), by the daily job. Setting either to `0` keeps data for longer, and the dashboard banner says "kept indefinitely".
 - **Erasure.** When an entry is deleted from Forms, the package removes the old and new values it stored for that entry. It keeps who, when and which field. Whether you may keep that after an erasure request is your DPO's decision. The package assumes you can, and that reading is unverified.
 - **Scrub lag.** The scrub is immediate in some cases and delayed in the rest.
-  - Deleting one entry or many from the backoffice entries screens is scrubbed in the same request, but only for entries Forms confirmed deleting in that request. If Forms confirmed none, nothing is scrubbed. If a bulk delete fails partway, the daily job scrubs the rest.
+  - Deleting one entry or many from the backoffice entries screens is scrubbed in the same request, but only for entries Forms confirmed deleting in that request. If Forms confirmed none, nothing is scrubbed. If a bulk delete fails partway, the daily job scrubs the rest. On SQL Server, Forms' own bulk delete fails above about 2,000 entries per request (SQL Server's 2,100-parameter limit in Forms' `RecordStorage.GetRecords`), so delete in batches of 2,000 or fewer.
   - Permanently deleting a form scrubs the stored values of its entries that no longer exist, at once. Any that still exist wait for the daily job.
   - For all deletes made outside the backoffice, such as code calling Forms, or Forms' scheduled record deletion, the daily job scrubs them up to 24 hours later.
   - Emptying the Forms recycle bin is unconfirmed. It may scrub at once or wait, and the daily job is the safety net.
@@ -405,6 +405,8 @@ The dashboard talks to endpoints under `/umbraco/formsaudit/api/v1/`. The design
 ### SQLite on busy sites
 
 On SQLite, deleting entries from the Forms entries screen, whether one entry or many, can hang if another request writes to the database at the same time. This comes from Umbraco Forms, and Forms' own edits can trigger it too. This package writes a row whenever someone views, opens or exports entries, so it adds more of those writes and makes the hang more likely when several people use the entries screens at once. SQL Server showed no hang in testing. If more than one person works with Forms entries at the same time, use SQL Server.
+
+Umbraco's own background jobs write to the database every few seconds, so a long delete can hang on an otherwise quiet site. In testing, deleting 5,000 entries at once hung for about 10 minutes and then failed with "database is locked", with this package's auditing switched on or off; deleting 1,000 took about a second and finished. On SQLite, delete in batches of 1,000 or fewer.
 
 ## Roadmap
 

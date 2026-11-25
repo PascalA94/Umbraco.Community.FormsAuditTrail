@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Umbraco.Forms.Core.Models;
-using Umbraco.Forms.Core.Services;
 
 namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 
@@ -8,7 +7,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// Reads field captions and the sensitive-data flag (<c>Field.ContainsSensitiveData</c>, spike S4) from the form
 /// definition. Scoped, like the Forms services it wraps.
 /// </summary>
-internal sealed class FormFieldInfoProvider(IFormService forms, ILogger<FormFieldInfoProvider> logger) : IFormFieldInfoProvider
+internal sealed class FormFieldInfoProvider(RequestFormCache forms, ILogger<FormFieldInfoProvider> logger) : IFormFieldInfoProvider
 {
     public IReadOnlyDictionary<Guid, FieldInfo> GetFields(Guid formId)
     {
@@ -20,13 +19,7 @@ internal sealed class FormFieldInfoProvider(IFormService forms, ILogger<FormFiel
                 return new Dictionary<Guid, FieldInfo>();
             }
 
-            var result = new Dictionary<Guid, FieldInfo>();
-            foreach (Field field in form.AllFields)
-            {
-                result[field.Id] = new FieldInfo(field.Caption ?? field.Id.ToString(), field.ContainsSensitiveData);
-            }
-
-            return result;
+            return Map(form);
         }
         catch (Exception ex)
         {
@@ -34,5 +27,19 @@ internal sealed class FormFieldInfoProvider(IFormService forms, ILogger<FormFiel
             logger.LogWarning(ex, "Could not load field information for form {FormId}; field metadata unavailable, so unknown fields are treated as sensitive.", formId);
             return new Dictionary<Guid, FieldInfo>();
         }
+    }
+
+    public IReadOnlyDictionary<Guid, FieldInfo> GetLoadedFields(Guid formId) =>
+        forms.GetLoaded(formId) is { } form ? Map(form) : new Dictionary<Guid, FieldInfo>();
+
+    private static Dictionary<Guid, FieldInfo> Map(Form form)
+    {
+        var result = new Dictionary<Guid, FieldInfo>();
+        foreach (Field field in form.AllFields)
+        {
+            result[field.Id] = new FieldInfo(field.Caption ?? field.Id.ToString(), field.ContainsSensitiveData);
+        }
+
+        return result;
     }
 }

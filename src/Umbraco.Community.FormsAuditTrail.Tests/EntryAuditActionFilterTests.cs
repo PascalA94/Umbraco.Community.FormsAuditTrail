@@ -674,7 +674,7 @@ public sealed class EntryAuditActionFilterTests : IDisposable
     }
 
     private void KnowFields() =>
-        _h.FieldInfo.GetFields(CaptureHarness.FormId).Returns(new Dictionary<Guid, FieldInfo>
+        _h.FieldInfo.GetLoadedFields(CaptureHarness.FormId).Returns(new Dictionary<Guid, FieldInfo>
         {
             [NameField] = new("Name", false),
             [EmailField] = new("Email", true),
@@ -975,6 +975,55 @@ public sealed class EntryAuditActionFilterTests : IDisposable
         Assert.Equal(["Name"], write.Detail!.FieldCaptions);
         Assert.Empty(write.Changes);
         Assert.Empty(write.RecordIds);
+    }
+
+    [Fact]
+    public async Task Filter_Create_ReadsFormBeforeTheActionAndNeverDuringIt() // @M3-T13b SQLite create hang
+    {
+        _h.UseRealFieldInfo = true;
+        var field = new Umbraco.Forms.Core.Models.Field { Id = NameField, Caption = "Name" };
+        var form = new Umbraco.Forms.Core.Models.Form
+        {
+            Id = CaptureHarness.FormId,
+            Pages = [new Umbraco.Forms.Core.Models.Page { FieldSets = [new Umbraco.Forms.Core.Models.FieldSet { Containers = [new Umbraco.Forms.Core.Models.FieldsetContainer { Fields = [field] }] }] }],
+        };
+        _h.FormService.Get(CaptureHarness.FormId).Returns(form);
+        int readsBeforeAction = -1;
+        int readsAfterAction = -1;
+        Guid newId = Guid.NewGuid();
+
+        await _h.RunAsync(
+            typeof(CreateRecordController),
+            FormRoute(),
+            result: () => new ObjectResult(new { id = newId }) { StatusCode = 201 },
+            duringAction: () =>
+            {
+                readsBeforeAction = _h.FormService.ReceivedCalls().Count();
+                _h.SaveRecord(StoredWith(newId, 0, (NameField, ["SENTINEL-CREATED"])));
+                readsAfterAction = _h.FormService.ReceivedCalls().Count();
+            });
+
+        // One read outside Forms' save scope (before next), none while Forms saves, and the caption still resolves.
+        Assert.Equal(1, readsBeforeAction);
+        Assert.Equal(readsBeforeAction, readsAfterAction);
+        Assert.Equal(["Name"], Assert.Single(_h.Writes).Detail!.FieldCaptions);
+    }
+
+    [Fact]
+    public async Task Filter_Create_FormReadThrowsBeforeAction_StillRunsAndRecordsWithoutCaptions() // @M3-T13b E12
+    {
+        _h.UseRealFieldInfo = true;
+        _h.FormService.Get(CaptureHarness.FormId).Returns(_ => throw new InvalidOperationException("db down"));
+        _h.Options.EntryAudit.Enabled = true;
+
+        await RunCreate(Guid.NewGuid());
+
+        Assert.Equal(1, _h.NextCalls);
+        // The one read that failed is not retried inside the save scope; the id stands in for the caption.
+        Assert.Single(_h.FormService.ReceivedCalls());
+        AccessWrite write = Assert.Single(_h.Writes);
+        Assert.Equal(AccessEventType.Created, write.EventType);
+        Assert.Equal([NameField.ToString()], write.Detail!.FieldCaptions);
     }
 
     [Fact]

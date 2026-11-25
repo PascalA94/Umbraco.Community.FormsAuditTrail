@@ -41,6 +41,7 @@ public class CompositionTests
         typeof(EntryAudit.ConfigChangeRecorder),
         typeof(EntryAudit.EntryAuditCapture),
         typeof(EntryAudit.FormFieldInfoProvider),
+        typeof(EntryAudit.RequestFormCache),
         typeof(EntryAudit.IForeignValueHandlerDetector), // factory-registered: it needs the composer's final service collection
         typeof(EntryAudit.UploadPathResolver),
         typeof(EntryAudit.UploadBackOfficeUserResolver),
