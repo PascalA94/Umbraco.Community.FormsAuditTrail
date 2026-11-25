@@ -151,3 +151,14 @@ Only if you want finer history inside M1 and M2. Parents follow the order shown,
 2. Push the branch and open the PR (you, not the agents).
 3. Run `release-checks.yml` on the branch, then on `main` after the merge, on the merged commit.
 4. Do not merge `main` into `v17`.
+
+## Milestone commit: retake screenshots
+
+Branch `docs/screenshots-refresh`. Run these yourself:
+
+1. `git status`: only `assets/screenshots`, `README.md`, `umbraco-marketplace.json` and this file changed; no secrets, no `.env`, no local settings.
+2. `git add -A`
+3. `git commit -m "docs: retake screenshots"`
+4. `git log -1`
+
+Then push, open the PR and merge. NuGet picks up the README and marketplace change on the next release.
