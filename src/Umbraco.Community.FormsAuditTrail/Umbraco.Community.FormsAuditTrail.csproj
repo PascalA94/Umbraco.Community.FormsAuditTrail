@@ -16,7 +16,7 @@
 
   <PropertyGroup>
     <PackageId>Umbraco.Community.FormsAuditTrail</PackageId>
-    <Version>18.1.1</Version>
+    <Version>18.1.2</Version>
     <Authors>Pascal Meyer</Authors>
     <Description>A view-only audit trail for Umbraco Forms. Records who changed what on form designs (fields, pages, workflows and form settings), and who viewed, searched, exported, downloaded, edited or deleted form entries, with field-level edit history and delete capture. The history is shown in backoffice dashboards with filtering, diffs and CSV export, and the entry access log is limited to named user groups.</Description>
     <Copyright>Copyright © Pascal Meyer</Copyright>
