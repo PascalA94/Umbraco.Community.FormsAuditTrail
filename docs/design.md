@@ -666,6 +666,7 @@ The rule for any type S11 or a later Forms version adds: an endpoint that return
 **Dedupe**
 
 - Key: `userKey + eventType + formId + recordId + hash(shaped filter) + page`.
+- For a member lookup the member identifier is part of the dedupe subject, held in memory only like the filter hash (R33, R37a).
 - Store in a **dedicated** `MemoryCache` owned by the deduplicator, with `SizeLimit = 50,000` entries (each entry size 1), not the shared `IMemoryCache`. Keys vary with filter hash and page, so one user can create keys at request rate (SEC-L6). Entries expire after `DeduplicateSeconds`. Per server is fine in load-balanced setups (a rare duplicate is acceptable; a missing row is not). (architect's call)
 - When the cache is full, the entry is not cached and the row is written. Dedupe fails towards writing.
 - Applies to ListViewed, DetailViewed, AuditViewed, AuditSearched, FileViewed and MemberSummaryViewed only. Never to Edited, Deleted, Exported, downloads, WorkflowRetried, Created, ConfigChanged or AuditGap.

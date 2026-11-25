@@ -116,6 +116,18 @@ public class EntryAuditDetailTests
     }
 
     [Fact]
+    public void Detail_Shape_FileNameEmojiAtTheCut_DoesNotSplitSurrogatePair() // @M2-FIX A4
+    {
+        // 259 letters then an emoji (two UTF-16 units) puts the high surrogate at the last allowed position.
+        string name = new string('f', 259) + "\U0001F600.csv";
+
+        string shaped = EntryAuditDetail.Shape(new EntryAuditDetail { FileName = name }, false).FileName!;
+
+        Assert.Equal(259, shaped.Length);
+        Assert.False(char.IsHighSurrogate(shaped[^1]));
+    }
+
+    [Fact]
     public void Detail_Shape_MemberEmailDropped_KeyKept() // E16
     {
         EntryAuditDetail email = EntryAuditDetail.Shape(new EntryAuditDetail { MemberKey = "jane@example.com" }, false);

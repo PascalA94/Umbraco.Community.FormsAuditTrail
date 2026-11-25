@@ -68,7 +68,7 @@ jobs:
 
       # A skipped test reports as success, so fail unless the trx proves they ran. Raise --min with each new [SqlServerFact].
       - name: Check the SQL Server tests executed
-        run: python3 -I build/check-trx.py "$RUNNER_TEMP/trx/sqlserver.trx" --category SqlServer --min 4
+        run: python3 -I build/check-trx.py "$RUNNER_TEMP/trx/sqlserver.trx" --category SqlServer --min 6
 
       - name: Upload test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

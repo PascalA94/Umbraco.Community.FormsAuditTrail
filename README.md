@@ -114,6 +114,14 @@ The package creates three tables in the Umbraco database:
 - Form copies are recorded as `Created` events, because Umbraco Forms 18 has no copy notification.
 - Umbraco Deploy transfers are recorded but attributed to **System**, not to the user who ran the deployment, because the notification doesn't include the deploying user.
 
+### Uploaded files
+
+Opening an uploaded file is recorded as a `FileViewed` row that holds a hash of the file's path, never the file name, because upload names often contain the data subject's name. The audit watches the same `/media/forms/upload/` path that Umbraco Forms itself protects, and Forms hard-codes that path. If your site moves `UmbracoMediaPath`, Forms may not protect uploads at all and this package does not see them either. With `Umbraco:Forms:Security:DisableFileUploadAccessProtection` switched on, Forms checks nothing, so a file opened without a backoffice sign-in is recorded against an Unknown user. A file opened on an expired backoffice session is still attributed to that user and marked `sessionExpired`.
+
+### SQLite on busy sites
+
+On SQLite, deleting entries from the Forms entries screen, whether one entry or many, can hang if another request writes to the database at the same time. This comes from Umbraco Forms, and Forms' own edits can trigger it too. This package writes a row whenever someone views, opens or exports entries, so it adds more of those writes and makes the hang more likely when several people use the entries screens at once. SQL Server showed no hang in testing. If more than one person works with Forms entries at the same time, use SQL Server.
+
 ## Roadmap
 
 Ideas for future versions. Contributions are welcome.

@@ -17,7 +17,7 @@ Branch `fc/m1-schema`. Pascal asked (2026-11-24) to keep building past M1 withou
 - [x] Task 7: `feat: add EntryAudit options with validation`
 - [x] Task 8: `feat: add entry access tables and migrations for SQLite and SQL Server` (plus `release-checks.yml`, a manual workflow for the SQL Server tests)
 - [x] Task 9: `feat: add access retention, edit value expiry and erasure reconciliation to the daily job`
-- M1 end tree: `93900d7`
+- M1 end tree: `93900d7` before the milestone fix wave; `9abb3cc` after it (this one also contains Task 10, the first M2 task, because work was pipelined).
 
 ## Adapted from UserActivity
 
@@ -25,6 +25,9 @@ Branch `fc/m1-schema`. Pascal asked (2026-11-24) to keep building past M1 withou
 - Task 7: `Configuration/UserActivityOptions.cs`, `Configuration/UserActivityOptionsValidator.cs` (options shape, post-configure and validation).
 - Task 8: none copied (read for the shared column-width constant idea only).
 - Task 9: `Recorder/RetentionJob.cs` (batch loop, exception-type-only outcomes, zero days means skip), `Recorder/RecorderSql.cs` (parameterised SQL, quoted names via the syntax provider). Patterns adapted, no verbatim copy.
+- Task 10: `Security/ViewThrottle.cs` into `EntryAudit/EntryAuditDeduplicator.cs` (bounded cache, fail towards writing).
+- Task 11: `Recorder/RecorderWriter.cs` (never-blocks write path). `Identity/ActorRef.cs` and `UserIdentityResolver.cs` not adapted here: the caller resolves the user (Task 12).
+- Task 12: `Identity/UserIdentityResolver.cs` into `NotificationHandlers/AuditHandlerHelpers.cs` `TryGetCurrentUser` (a found user keeps its own name, a missing one never borrows another identity). `Identity/ActorRef.cs` read, not needed: only the current user is resolved here.
 
 ## Paused here (2026-11-16)
 

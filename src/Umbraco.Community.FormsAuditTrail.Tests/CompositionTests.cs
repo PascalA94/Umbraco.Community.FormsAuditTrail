@@ -36,6 +36,16 @@ public class CompositionTests
         typeof(EntryAudit.EntryAuditCollector),
         typeof(EntryAudit.EntryAuditCollectorAccessor),
         typeof(EntryAudit.EntryAuditDeduplicator),
+        typeof(EntryAudit.EntryAuditHealth),
+        typeof(EntryAudit.EntryAuditWriter),
+        typeof(EntryAudit.EntryAuditCapture),
+        typeof(EntryAudit.FormFieldInfoProvider),
+        typeof(EntryAudit.IForeignValueHandlerDetector), // factory-registered: it needs the composer's final service collection
+        typeof(EntryAudit.UploadPathResolver),
+        typeof(EntryAudit.UploadBackOfficeUserResolver),
+        typeof(NotificationHandlers.EntrySearchResultFetchingHandler),
+        typeof(NotificationHandlers.RecordFetchingHandler),
+        typeof(NotificationHandlers.RecordSavingHandler),
         typeof(FormSnapshotService),
         typeof(FormDiffService),
         typeof(NotificationHandlers.FormSavingHandler),
@@ -50,7 +60,7 @@ public class CompositionTests
     /// they are not descriptors. Tasks 12 (<c>EntryAuditActionFilter</c>) and 12a (<c>UploadAuditMiddleware</c>) add
     /// themselves here and are then created through <see cref="ActivatorUtilities"/> exactly as MVC and the pipeline do.
     /// </summary>
-    internal static readonly Type[] ActivatorUtilitiesTypes = [];
+    internal static readonly Type[] ActivatorUtilitiesTypes = [typeof(EntryAudit.EntryAuditActionFilter), typeof(EntryAudit.UploadAuditMiddleware)];
 
     [Fact]
     public void Compose_ValidateScopesAndOnBuild_ResolvesEveryPackageType() // P2
@@ -69,8 +79,23 @@ public class CompositionTests
 
             foreach (Type type in ActivatorUtilitiesTypes)
             {
-                Assert.NotNull(ActivatorUtilities.CreateInstance(scope.ServiceProvider, type));
+                // Middleware is built with its RequestDelegate, as UseMiddleware does; the pipeline supplies it, not the container.
+                object[] arguments = type.Name.EndsWith("Middleware", StringComparison.Ordinal)
+                    ? [(Microsoft.AspNetCore.Http.RequestDelegate)(_ => Task.CompletedTask)]
+                    : [];
+                Assert.NotNull(ActivatorUtilities.CreateInstance(scope.ServiceProvider, type, arguments));
             }
+        }
+    }
+
+    [Fact]
+    public void Compose_RegistersTheActionFilterGlobally() // @M2-T12
+    {
+        (_, ServiceProvider provider) = BuildProvider();
+        using (provider)
+        {
+            var mvc = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Mvc.MvcOptions>>().Value;
+            Assert.Single(mvc.Filters.OfType<Microsoft.AspNetCore.Mvc.TypeFilterAttribute>(), f => f.ImplementationType == typeof(EntryAudit.EntryAuditActionFilter));
         }
     }
 
@@ -106,6 +131,37 @@ public class CompositionTests
     }
 
     [Fact]
+    public void Compose_ForeignValueHandlerDetector_IsOneSingletonAlsoRunAtStarted() // @M3-T13 S10
+    {
+        (_, ServiceProvider provider) = BuildProvider();
+        using (provider)
+        {
+            var detector = provider.GetRequiredService<EntryAudit.IForeignValueHandlerDetector>();
+
+            Assert.Same(detector, provider.GetRequiredService<EntryAudit.IForeignValueHandlerDetector>());
+            Assert.True(provider.GetServices<Umbraco.Cms.Core.Events.INotificationAsyncHandler<Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification>>().Any(h => ReferenceEquals(h, detector)));
+        }
+    }
+
+    [Fact]
+    public async Task Compose_ForeignValueHandlerDetector_OwnRegistrationsAreNotForeign() // @M2-FIX C11 S10
+    {
+        // The detector counts a factory-only registration as foreign. If one of our own fetch handlers were registered
+        // that way (or an Umbraco upgrade changed how AddNotificationHandler registers), every site would be flagged,
+        // so this runs it over the real composer's service collection.
+        (_, ServiceProvider provider) = BuildProvider();
+        using (provider)
+        {
+            var detector = provider.GetRequiredService<EntryAudit.IForeignValueHandlerDetector>();
+            var started = (Umbraco.Cms.Core.Events.INotificationAsyncHandler<Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification>)detector;
+
+            await started.HandleAsync(new Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification(false), CancellationToken.None);
+
+            Assert.False(detector.HasForeignValueHandlers);
+        }
+    }
+
+    [Fact]
     public void Compose_ExpectedPackageTypes_CoversEveryRegisteredPackageType()
     {
         (ServiceCollection services, ServiceProvider provider) = BuildProvider();
@@ -128,7 +184,7 @@ public class CompositionTests
         // The list above could drift from the code if someone adds a service and forgets both the registration and the
         // list. Any concrete package class named like a service must be listed, created by ActivatorUtilities, or be an
         // explicit, reasoned exception.
-        string[] serviceSuffixes = ["Handler", "Job", "Store", "Reader", "Collector", "Accessor", "Deduplicator", "Writer", "Middleware", "Filter", "Service"];
+        string[] serviceSuffixes = ["Handler", "Job", "Store", "Reader", "Collector", "Accessor", "Deduplicator", "Writer", "Health", "Middleware", "Filter", "Service"];
         Dictionary<Type, string> notInjected = new()
         {
             [typeof(Controllers.FormsAuditApiController)] = "An MVC controller, activated by MVC and not registered in the container.",
@@ -188,7 +244,6 @@ public class CompositionTests
         services.AddSingleton(Substitute.For<Umbraco.Forms.Core.Data.Storage.IRecordStorage>());
         services.AddSingleton(Substitute.For<Umbraco.Forms.Core.Security.IFormsSecurity>());
         services.AddSingleton(Substitute.For<IUserService>());
-        services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Scoping.IScopeProvider>());
         services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Scoping.ICoreScopeProvider>());
         services.AddSingleton(Substitute.For<Umbraco.Cms.Infrastructure.Scoping.IScopeProvider>());
         services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Security.IBackOfficeSecurityAccessor>());
