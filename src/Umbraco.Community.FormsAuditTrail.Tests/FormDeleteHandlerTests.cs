@@ -325,6 +325,36 @@ public class FormDeleteHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Deleted_Form_ScrubAndUserLookupBothThrow_DoesNotThrowAndStillWritesAccessRowsForEveryForm()
+    {
+        var other = new Form { Id = Guid.Parse("66666666-6666-6666-6666-666666666666"), Name = "Other form" };
+        _http.HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        _reader.FindAnyExistingIdAsync(Arg.Any<CancellationToken>()).Returns<Task<Guid?>>(_ => throw new InvalidOperationException("reader down"));
+        _security.CurrentUser.Returns(_ => throw new InvalidOperationException("accessor down"));
+        var deleted = new FormDeletedNotification([_form, other], new EventMessages());
+        _db.AddAccess(AccessEventType.Edited, _form.Id, Now.AddDays(-1), recordId: Guid.NewGuid(), changes:
+        [
+            new FormEntryChange { FieldId = Guid.NewGuid(), FieldCaption = "Email", OldValue = "old", NewValue = "new" },
+        ]);
+
+        try
+        {
+            await Deleted().HandleAsync(deleted, CancellationToken.None);
+        }
+        finally
+        {
+            _http.HttpContext = null;
+        }
+
+        Assert.Equal([_form.Id, other.Id], _writes.Select(w => w.FormId).ToArray());
+        Assert.All(_writes, w =>
+        {
+            Assert.Equal(AuditUserNames.Unknown, w.UserName);
+            Assert.True(w.Detail!.UserUnresolved);
+        });
+    }
+
+    [Fact]
     public async Task Deleted_Form_ScrubsOnlyRecordsNoLongerInForms() // @M3-T14 R63(2)
     {
         Guid gone = Guid.NewGuid();
