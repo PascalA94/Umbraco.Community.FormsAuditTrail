@@ -17,10 +17,102 @@ namespace Umbraco.Community.FormsAuditTrail.Migrations.SqlServer
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.AuditStateEntry", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("formsAuditTrailState", (string)null);
+                });
+
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAccessEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("FormId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FormName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("RecordCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("RecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UserKey")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("FormId");
+
+                    b.HasIndex("RecordId");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("UserKey");
+
+                    b.HasIndex("FormId", "Timestamp");
+
+                    b.ToTable("formsAuditTrailAccess", (string)null);
+                });
+
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAccessRecord", b =>
+                {
+                    b.Property<long>("AccessId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("AccessId", "RecordId");
+
+                    b.HasIndex("RecordId");
+
+                    b.ToTable("formsAuditTrailAccessRecords", (string)null);
+                });
 
             modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAuditChange", b =>
                 {
@@ -113,6 +205,60 @@ namespace Umbraco.Community.FormsAuditTrail.Migrations.SqlServer
                     b.ToTable("formsAuditTrailEntries", (string)null);
                 });
 
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormEntryChange", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AccessId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("Cleared")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("FieldCaption")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("FieldId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Masked")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NewValue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OldValue")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ValuesScrubbedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessId");
+
+                    b.ToTable("formsAuditTrailEntryChanges", (string)null);
+                });
+
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAccessRecord", b =>
+                {
+                    b.HasOne("Umbraco.Community.FormsAuditTrail.Models.FormAccessEntry", "Access")
+                        .WithMany("Records")
+                        .HasForeignKey("AccessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Access");
+                });
+
             modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAuditChange", b =>
                 {
                     b.HasOne("Umbraco.Community.FormsAuditTrail.Models.FormAuditEntry", "AuditEntry")
@@ -122,6 +268,24 @@ namespace Umbraco.Community.FormsAuditTrail.Migrations.SqlServer
                         .IsRequired();
 
                     b.Navigation("AuditEntry");
+                });
+
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormEntryChange", b =>
+                {
+                    b.HasOne("Umbraco.Community.FormsAuditTrail.Models.FormAccessEntry", "Access")
+                        .WithMany("Changes")
+                        .HasForeignKey("AccessId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Access");
+                });
+
+            modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAccessEntry", b =>
+                {
+                    b.Navigation("Changes");
+
+                    b.Navigation("Records");
                 });
 
             modelBuilder.Entity("Umbraco.Community.FormsAuditTrail.Models.FormAuditEntry", b =>

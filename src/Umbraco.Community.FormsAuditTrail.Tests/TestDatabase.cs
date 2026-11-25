@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Umbraco.Community.FormsAuditTrail.Models;
 using Umbraco.Community.FormsAuditTrail.Persistence;
 
@@ -16,12 +17,13 @@ internal sealed class TestDatabase : IDisposable
 
     public SqliteFormsAuditDbContext Context { get; }
 
-    public TestDatabase()
+    public TestDatabase(params IInterceptor[] interceptors)
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
         DbContextOptions<SqliteFormsAuditDbContext> options = new DbContextOptionsBuilder<SqliteFormsAuditDbContext>()
             .UseSqlite(_connection)
+            .AddInterceptors(interceptors)
             .Options;
         Context = new SqliteFormsAuditDbContext(options);
         Context.Database.EnsureCreated();
@@ -51,6 +53,46 @@ internal sealed class TestDatabase : IDisposable
         }
 
         Context.AuditEntries.Add(entry);
+        Context.SaveChanges();
+        return entry;
+    }
+
+    public FormAccessEntry AddAccess(
+        AccessEventType type,
+        Guid formId,
+        DateTime timestampUtc,
+        Guid? recordId = null,
+        Guid? userKey = null,
+        IEnumerable<Guid>? childRecordIds = null,
+        IEnumerable<FormEntryChange>? changes = null,
+        string? detail = null,
+        Guid? correlationId = null)
+    {
+        var childIds = childRecordIds?.ToList() ?? new List<Guid>();
+        var entry = new FormAccessEntry
+        {
+            Timestamp = timestampUtc,
+            EventType = (int)type,
+            FormId = formId,
+            FormName = "Test form",
+            RecordId = recordId,
+            RecordCount = recordId is null ? childIds.Count : 1,
+            UserKey = userKey ?? Guid.NewGuid(),
+            UserName = "Editor",
+            Detail = detail,
+            CorrelationId = correlationId,
+        };
+        foreach (var id in childIds)
+        {
+            entry.Records.Add(new FormAccessRecord { RecordId = id });
+        }
+
+        foreach (var change in changes ?? Enumerable.Empty<FormEntryChange>())
+        {
+            entry.Changes.Add(change);
+        }
+
+        Context.AccessEntries.Add(entry);
         Context.SaveChanges();
         return entry;
     }
