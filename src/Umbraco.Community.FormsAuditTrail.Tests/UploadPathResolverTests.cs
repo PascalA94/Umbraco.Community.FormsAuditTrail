@@ -80,6 +80,91 @@ public class UploadPathResolverTests
         Assert.Null(_resolver.ResolveFormId(new PathString($"/media/forms/upload/form_bad/form_{FormId}/b.pdf")));
     }
 
+    private static readonly Guid FolderGuid = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+
+    public static TheoryData<string> WindowsEquivalentPaths() => new()
+    {
+        $"/media/forms/upload./form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload../form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload. /form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload /form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/UPLOAD./form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload.\\form_{FormId}\\{FolderGuid}\\file.pdf",
+        $"/media./forms. /upload/form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId}./{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId} /{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId}/{FolderGuid}./file.pdf",
+        $"/media/forms/upload/form_{FormId}/{FolderGuid} /file.pdf",
+        $"/media/forms/upload/form_{FormId}/{FolderGuid}/file.pdf.",
+        $"/media/forms/upload/form_{FormId}/{FolderGuid}/file.pdf ",
+        $"/media/forms/upload/form_{FormId}/{FolderGuid}/file.pdf. .",
+        // Dot segments, double slashes and mixed case were already served and audited.
+        $"/media/forms/upload/./form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId}/./{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId}/x/../{FolderGuid}/file.pdf",
+        $"/media/forms/./upload/form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms//upload//form_{FormId}//{FolderGuid}//file.pdf",
+        $"/MeDiA/FoRmS/UpLoAd/form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/x/..\\upload/form_{FormId}/{FolderGuid}/file.pdf",
+        // A segment of only dots and spaces is an ordinary name that a later '..' removes.
+        $"/media/forms/x/...\\..\\..\\upload/form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/x/ \\..\\..\\upload/form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/x/. .\\..\\..\\upload/form_{FormId}/{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId}/...\\..\\{FolderGuid}/file.pdf",
+        $"/media/forms/upload/form_{FormId}/ \\..\\{FolderGuid}/file.pdf",
+    };
+
+    [Theory]
+    [MemberData(nameof(WindowsEquivalentPaths))]
+    public void Resolver_WindowsEquivalentSegments_MatchHashAndResolveLikeThePlainPath(string path) // @M2-FIX path segment normalisation
+    {
+        var plain = new PathString($"/media/forms/upload/form_{FormId}/{FolderGuid}/file.pdf");
+        var variant = new PathString(path);
+
+        Assert.True(_resolver.IsUploadRequest(variant));
+        Assert.Equal(FormId, _resolver.ResolveFormId(variant));
+        Assert.Equal(_resolver.HashPath(plain), _resolver.HashPath(variant));
+    }
+
+    [Theory]
+    [InlineData("/media/forms/uploads./form_x/a.pdf")]
+    [InlineData("/media/forms/upload./")]
+    [InlineData("/media/forms/upload../")]
+    [InlineData("/media/forms/up.load/form_x/a.pdf")]
+    [InlineData("/media/other./upload/form_x/a.pdf")]
+    [InlineData("/media/forms/upload/../a.pdf")]
+    public void Resolver_NormalisationDoesNotWidenTheMatch(string path) // @M2-FIX path segment normalisation
+    {
+        Assert.False(_resolver.IsUploadRequest(new PathString(path)));
+    }
+
+    [Fact]
+    public void Resolver_ParentSegmentBeforeSecondFormFolder_ResolvesTheSecondForm() // @M2-FIX path segment normalisation
+    {
+        var other = Guid.Parse("99999999-8888-7777-6666-555555555555");
+        var variant = new PathString($"/media/forms/upload/form_{FormId}/..\\form_{other}/{FolderGuid}/file.pdf");
+        var plain = new PathString($"/media/forms/upload/form_{other}/{FolderGuid}/file.pdf");
+
+        Assert.Equal(other, _resolver.ResolveFormId(variant));
+        Assert.Equal(_resolver.HashPath(plain), _resolver.HashPath(variant));
+    }
+
+    [Fact]
+    public void Resolver_ShortNameAliasOfFormFolder_IsStillAnUploadRequest() // @M2-FIX path segment normalisation
+    {
+        var path = new PathString("/media/forms/upload/FORM_A~1/x/f.pdf");
+
+        Assert.True(_resolver.IsUploadRequest(path));
+        Assert.Null(_resolver.ResolveFormId(path));
+    }
+
+    [Fact]
+    public void Resolver_FormFolderWithTrailingDot_StillCaseSensitiveAndUnresolvableWhenBad() // @M2-FIX path segment normalisation
+    {
+        Assert.Null(_resolver.ResolveFormId(new PathString($"/media/forms/upload./FORM_{FormId}./a/b.pdf")));
+        Assert.Null(_resolver.ResolveFormId(new PathString("/media/forms/upload./form_notaguid./a/b.pdf")));
+    }
+
     [Fact]
     public void Matcher_MatchesRecordUploadValue() // @M2-T12a
     {
