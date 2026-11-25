@@ -1,7 +1,7 @@
 {
   "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
-  "Title": "Forms Audit Trail",
-  "Description": "A view-only audit trail for Umbraco Forms design changes. It tracks who changed what on form designs (fields, pages, workflows and form settings) and shows the history in a backoffice dashboard with filtering, field-level diffs and CSV export.\n\nUmbraco Forms 17.6 and 18.2 keep a history on each form and can roll it back. This package adds one view across all forms, with field-level changes, filtering, CSV export and a record that outlasts deleted forms.",
+  "Title": "Forms Audit Trail: who touched your form data",
+  "Description": "See who viewed, edited, deleted and exported Umbraco Forms entries, who opened uploaded files, and who changed your form designs. Everything sits in one Audit dashboard in the Forms section.\n\nThe entry access audit records list views, entry opens, edits with before and after values (sensitive fields masked), deletes, exports and file downloads. It has its own retention, scrubs stored values when entries are erased, limits the log to chosen user groups and records who looked at the log itself. The design audit tracks changes to fields, pages, workflows and form settings with field-level diffs. Both have filters and CSV export.\n\nEntry auditing is on by default and records personal data about your staff. Read the GDPR section of the README before you install.",
   "Category": "Editor Tools",
   "PackageType": "Package",
   "LicenseTypes": [
@@ -22,7 +22,11 @@
     "audit-trail",
     "change-tracking",
     "backoffice",
-    "dashboard"
+    "dashboard",
+    "gdpr",
+    "compliance",
+    "entries",
+    "privacy"
   ],
   "Screenshots": [
     {

@@ -4,7 +4,7 @@
 [![NuGet downloads](https://img.shields.io/nuget/dt/Umbraco.Community.FormsAuditTrail)](https://www.nuget.org/packages/Umbraco.Community.FormsAuditTrail)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail/blob/main/LICENSE)
 
-A community package, not made or supported by Umbraco HQ. Requires Umbraco 18.3+ with Umbraco Forms 18.2.2+ (package 18.x), or Umbraco 17.7+ with Umbraco Forms 17.5.2+ (package 17.x), on .NET 10.
+A community package, not made or supported by Umbraco HQ. Requires Umbraco 18.3+ with Umbraco Forms 18.2.2+ (package 18.x), or Umbraco 17.8+ with Umbraco Forms 17.6.2+ (package 17.1.0 and later), on .NET 10.
 
 ## Forms Audit Trail: who touched your form data
 
@@ -67,9 +67,9 @@ They work side by side. Use Forms' history to roll a form back, and this package
 | Package version | Branch | Umbraco CMS | Umbraco Forms | .NET | Database |
 |---|---|---|---|---|---|
 | 18.1.0 and later | `main` | 18.3.0+ | 18.2.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
-| 17.x | `v17` | 17.7+ | 17.5.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| 17.1.0 and later | `v17` | 17.8.0+ | 17.6.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
 
-The entry access audit is part of 18.1.0 and later. The 17.x line carries the design audit only, until the entry audit is released there.
+The entry access audit is part of 18.1.0 and 17.1.0 and later. Earlier 17.0.x releases (Umbraco 17.7+, Forms 17.5.2+) carry the design audit only.
 
 ### Versioning
 
@@ -84,7 +84,7 @@ The first release, `1.0.0`, targeted Umbraco 17 before this scheme existed. It i
 dotnet add package Umbraco.Community.FormsAuditTrail
 
 # Umbraco 17 - pin a 17.x version, otherwise the latest (18.x) is selected and restore fails
-dotnet add package Umbraco.Community.FormsAuditTrail --version 17.0.5
+dotnet add package Umbraco.Community.FormsAuditTrail --version 17.1.0
 ```
 
 The package registers itself through an `IComposer` and creates its database tables on startup. The dashboard appears as an **Audit** tab in the Forms section of the backoffice. Its first sub-tab, **Form changes**, is the design audit. **Entry access** and **Entry history** are the entry audit, and only users in an access-log group see them.
