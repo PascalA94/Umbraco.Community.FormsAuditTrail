@@ -155,7 +155,7 @@ G1 covers uploaded files served to the backoffice, workflow re-runs and backoffi
   - **Disclosure to staff:** `StoreEditValues=All` shows sensitive values to access-log groups.
   - **Not tamper-evident:** the log lives in the site database and anyone with DB access can change it (SEC-08).
   - **Not complete:** the "What is not captured" list (SEC-01).
-- **Release gate:** the README GDPR section and the upgrade notice are reviewed by a DPO or legal adviser before **18.1.0 stable** (the beta may ship without it). This is a release-checklist item (section 10), escalated by the security review, and is not something the package team can sign off.
+- **Release gate (waived):** the security review asked for a DPO or legal review of the README GDPR section and the upgrade notice before **18.1.0 stable**. Waived by Pascal on 2026-11-25: a package author is not the data controller and no law requires the review; the README section is hedged, says it is not legal advice and sends each site owner to their own DPO, and a later version can correct the wording.
 
 **Security** (from `umbraco-pitfalls.md`, Critical and Security items)
 
@@ -908,7 +908,7 @@ Exit: a one-page note in the repo's PR description (not a new doc) with a yes/no
 
 **Versions and order**
 
-1. `main`: **18.1.0-beta.1** → 2 to 3 agency sites → **18.1.0**. Built as one PR per milestone (M0 setup, M1 to M5), each rebase-merged so the checkpoint commits stay separate; a `security-analyst` checkpoint runs after M2 (Pascal, plan review).
+1. `main`: **18.1.0-beta.1** → **18.1.0** (Pascal chose on 2026-11-25 to release stable the same day as the beta, without the agency-site run). Built as one PR per milestone (M0 setup, M1 to M5), each rebase-merged so the checkpoint commits stay separate; a `security-analyst` checkpoint runs after M2 (Pascal, plan review).
 2. Cherry-pick to `v17` (never merge), one PR per milestone, after a v17 base PR with the TestSite, docs and floors → **17.1.0-beta.1** → **17.1.0**. Expect manual work in the delete handlers, the csproj (`Umbraco.Cms.Api.Management`) and `build.yml` triggers.
 3. Rebuild the client per branch; commit `wwwroot/`.
 4. Bump the four version files per branch. Update the pinned `--version 17.x.y` install command in **both** READMEs.
@@ -921,7 +921,7 @@ Exit: a one-page note in the repo's PR description (not a new doc) with a yes/no
 - [ ] CI green on both legs, including the transitive audit and the completeness contract test.
 - [ ] M0 spikes S1 to S12 recorded; S11 run on 18.2.2 and 17.6.2.
 - [ ] `security-analyst` review of the built filter, upload middleware, writer, policy and API, with each High in `security-review.md` closed or accepted by Pascal as residual risk. *
-- [ ] **DPO or legal review of the README "GDPR" section and the upgrade notice (SEC-11, escalated).** *
+- [x] ~~DPO or legal review of the README "GDPR" section and the upgrade notice (SEC-11, escalated).~~ Waived for 18.1.0, see section 4.
 - [ ] README "What is not captured" lists every `NotAudited` surface. README states the log is not tamper-evident, the DB principal needs DDL rights at first start, Users-section access equals admin for this log, and the `DROP` warning.
 - [ ] Repo settings (SEC-I4): secret scanning, push protection and Dependabot security updates on; CodeQL workflow present; `v*` tag ruleset; `nuget` environment with required reviewer.
 
@@ -1042,7 +1042,7 @@ Source: `security-review.md` (2026-10-30, `security-analyst`, architecture stage
 | SEC-08 | Medium | README states the log is not tamper-evident; `EmitLogEvents` (default false) for an independent copy; hash chain stays Later | 4 GDPR, 6.3, 7.1, 7.7, 10 |
 | SEC-09 | Medium | Health signal reinstated in MVP (`migrationsPending`, last write failure, last job run); README states DDL rights needed at first start; S12 | 6.2 E18, 7.2, 7.5, 7.6, 8, 12 |
 | SEC-10 | Medium | Access CSV streamed with a 100,000-row cap and truncation line; scrub set-based in batches of 500; `LogListRecordIds` capped at 500 per row | 6.2 E1, 7.3, 7.5 |
-| SEC-11 | Medium | README GDPR section content listed (lawful basis, staff notice, DPIA, ROPA, backups, lag, disclosure); release notes lead with the D1 notice; one-time dismissible dashboard notice; DPO review is a release-checklist item | 4 GDPR, 7.6, 10 |
+| SEC-11 | Medium | README GDPR section content listed (lawful basis, staff notice, DPIA, ROPA, backups, lag, disclosure); release notes lead with the D1 notice; one-time dismissible dashboard notice; DPO review waived by Pascal for 18.1.0 (section 4) | 4 GDPR, 7.6, 10 |
 | SEC-12 | Medium | Read-time masking fails closed: masked if `Masked`, sensitive now, or field/form gone | 7.3, 7.5 step 5, 9 |
 | SEC-13 | Medium | Actions SHA-pinned; `environment: nuget` with required reviewer; Trusted Publishing bound to it; tag ruleset; tag-on-branch check | 4 Security, 10 step 5, 10 checklist |
 | SEC-L1 | Low | `CsvFormatter.Escape` handles leading `\r` and whitespace-then-trigger; formula tests on every new column incl. `Detail` and `UserName` | 4 Security, 7.2, 7.5 |
