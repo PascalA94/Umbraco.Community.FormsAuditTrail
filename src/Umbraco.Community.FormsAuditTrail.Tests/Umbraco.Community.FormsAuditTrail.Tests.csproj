@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -28,6 +30,10 @@
     <PackageReference Include="Umbraco.Cms.Web.Common" Version="$(UmbracoTestVersion)" />
     <PackageReference Include="Umbraco.Cms.Persistence.EFCore.Sqlite" Version="$(UmbracoTestVersion)" />
     <PackageReference Include="Umbraco.Cms.Persistence.EFCore.SqlServer" Version="$(UmbracoTestVersion)" />
+    <!-- The NPoco database providers Umbraco's own scope runs on, needed to boot a real Umbraco host for the
+         UFRecords reader tests. The package itself only needs the EF Core ones above. -->
+    <PackageReference Include="Umbraco.Cms.Persistence.Sqlite" Version="$(UmbracoTestVersion)" />
+    <PackageReference Include="Umbraco.Cms.Persistence.SqlServer" Version="$(UmbracoTestVersion)" />
     <PackageReference Include="Umbraco.Forms.Web" Version="$(FormsTestVersion)" />
     <PackageReference Include="Umbraco.Forms.Core.Providers" Version="$(FormsTestVersion)" />
   </ItemGroup>

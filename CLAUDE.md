@@ -13,7 +13,7 @@ The package major version matches the Umbraco major it targets. Each line lives 
 | Branch | Package | Umbraco CMS | Umbraco Forms | backoffice npm |
 |---|---|---|---|---|
 | `main` | 18.x | `[18.3.0, 19.0.0)` | `[18.2.2, 19.0.0)` | `^18.3.0` |
-| `v17` | 17.x | `[17.8.0, 18.0.0)` | `[17.6.2, 18.0.0)` | `^17.7.0` |
+| `v17` | 17.x | `[17.8.0, 18.0.0)` | `[17.6.2, 18.0.0)` | `^17.8.0` |
 
 - **This branch is `v17` (Umbraco 17 maintenance).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`.
 - The package's Umbraco floors live in `Directory.Build.props` as `UmbracoCmsVersion` (used by all four CMS references, including `Umbraco.Cms.Api.Management`) and `UmbracoFormsVersion`; CI's latest leg overrides them with `17.*`. Tests and the demo use exact `Umbraco*Version`/`Forms*Version` values at the same floors. Forms 17.6.2 needs CMS `[17.6.0, 18.0.0)`.
@@ -81,7 +81,7 @@ Tests are in `src/Umbraco.Community.FormsAuditTrail.Tests/`, a sibling folder, b
 
 1. Check for outdated dependencies, since only security alerts are automated (Dependabot version-update PRs are deliberately off): `npm outdated` in `Client/` and `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --outdated`. Keep Umbraco floors and `Microsoft.EntityFrameworkCore.Design` where they are unless there is a reason to move them.
 2. Open a PR against `main` or `v17`. Branches are protected by rulesets and PRs are squash-merged. The required checks are `build (floor)` and `build (latest)` (.NET build and test at the floor and newest 17.x, client rebuild and `wwwroot` drift), `secrets` (gitleaks), `osv / osv-scan` and `deps` (vulnerable packages). A package or lock file change regenerates `packages.lock.json` with a plain `dotnet restore` at the floor; never commit lock files from a latest-version restore.
-3. After merging, tag the merged commit `v<version>` (for example `v17.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
+3. After merging, dispatch `release-checks.yml` on the merged commit (Actions, Run workflow, choose `main` or `v17`) and wait for it to pass. It runs the SQL Server tests, which no other workflow runs, and `publish.yml` refuses to publish a commit that has no successful run of it. Then tag the merged commit `v<version>` (for example `v17.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
 4. Create a GitHub release: `gh release create v<version> --generate-notes`.
 5. The Umbraco Marketplace syncs from NuGet about every 2 hours. `umbraco-marketplace.json` is read from the root of `main`.
 

@@ -13,6 +13,7 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   CLIENT_DIR: src/Umbraco.Community.FormsAuditTrail/Client
+  PKG_DIR: src/Umbraco.Community.FormsAuditTrail
   # The latest leg lifts every Umbraco and Forms reference to the newest 17.x; see Directory.Build.props.
   LATEST_PROPS: '"-p:UmbracoCmsVersion=17.*" "-p:UmbracoFormsVersion=17.*" "-p:UmbracoTestVersion=17.*" "-p:FormsTestVersion=17.*" "-p:UmbracoDemoVersion=17.*" "-p:FormsDemoVersion=17.*"'
 
@@ -27,6 +28,8 @@ jobs:
         leg: [floor, latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -48,6 +51,10 @@ jobs:
         working-directory: ${{ env.CLIENT_DIR }}
         run: npm ci --ignore-scripts
 
+      - name: Audit client dependencies
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm audit --audit-level=high
+
       - name: Build client
         working-directory: ${{ env.CLIENT_DIR }}
         run: npm run build
@@ -68,7 +75,9 @@ jobs:
 
       - name: Restore (locked)
         if: matrix.leg == 'floor'
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode
+        # NU1903 and NU1904 are High and Critical advisories; the csproj keeps them as warnings so a local build is not
+        # blocked by an advisory published overnight, but CI must not pass with one.
+        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
 
       - name: Lock files unchanged
         if: matrix.leg == 'floor'
@@ -76,13 +85,31 @@ jobs:
 
       - name: Restore (latest 17.x, unlocked)
         if: matrix.leg == 'latest'
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx ${{ env.LATEST_PROPS }} --force-evaluate -p:RestoreLockedMode=false
+        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx ${{ env.LATEST_PROPS }} --force-evaluate -p:RestoreLockedMode=false -warnaserror:NU1903,NU1904
+
+      # dotnet list reads the assets file the restore just wrote, so on the latest leg this audits the newest 17.x
+      # graph, not the floor. Any severity fails (R19).
+      - name: Vulnerable packages (direct and transitive)
+        run: bash build/check-vulnerable.sh
 
       - name: Build
         run: dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
 
+      # A model change without a migration for both providers fails here (repo rule: dual-provider migrations).
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Model matches the SQLite migrations
+        working-directory: ${{ env.PKG_DIR }}
+        run: dotnet ef migrations has-pending-model-changes --context SqliteFormsAuditDbContext --configuration Release --no-build
+
+      - name: Model matches the SQL Server migrations
+        working-directory: ${{ env.PKG_DIR }}
+        run: dotnet ef migrations has-pending-model-changes --context SqlServerFormsAuditDbContext --configuration Release --no-build
+
+      # SQL Server tests run only in release-checks.yml (R21), so a pull request never needs a database server.
       - name: Test
-        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --logger "trx;LogFileName=results.trx" ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
+        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --filter "Category!=SqlServer" --logger "trx;LogFileName=results.trx" ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
 
       - name: Upload test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -96,6 +123,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: gitleaks
         run: bash build/gitleaks.sh "${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.sha }}"
@@ -119,6 +147,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
@@ -127,6 +157,16 @@ jobs:
           cache: true
           cache-dependency-path: '**/packages.lock.json'
       - name: Restore (locked)
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode
+        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
       - name: Vulnerable packages (direct and transitive)
         run: bash build/check-vulnerable.sh
+
+  build-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Unit tests for build scripts
+        working-directory: build/tests
+        run: python3 -B -m unittest -v

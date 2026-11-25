@@ -15,10 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read # only for the build.yml and release-checks.yml workflow-run gates below
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       # A tag publishes only from its line's release branch: v18.* from main, v17.* from v17.
@@ -44,6 +46,7 @@ jobs:
         run: |
           cd src/Umbraco.Community.FormsAuditTrail/Client
           npm ci --ignore-scripts
+          npm audit --audit-level=high
           npm run build
           cd ../../..
           git diff --exit-code -- src/Umbraco.Community.FormsAuditTrail/wwwroot
@@ -56,17 +59,50 @@ jobs:
           dotnet-version: '10.x'
 
       - name: Restore (locked)
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode
+        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
 
       - name: Build
         run: dotnet build src/Umbraco.Community.FormsAuditTrail.slnx --no-restore -c Release
 
+      # SQL Server tests run only in release-checks.yml, which the gate below requires; here CI=true would make them
+      # fail for want of a server.
       - name: Test
-        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx --no-build -c Release
+        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx --no-build -c Release --filter "Category!=SqlServer"
 
       # Parsed output, never the exit code.
       - name: Vulnerable packages
         run: bash build/check-vulnerable.sh
+
+      # build.yml runs on every push to main and v17, so the tagged commit must already have a green run. The
+      # workflow-runs API is scoped to build.yml itself, so a check run of the same name from another workflow or a
+      # GitHub App cannot satisfy it. A matrix failure makes the whole run's conclusion non-success.
+      - name: build.yml passed for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/build.yml/runs" \
+            -f head_sha="$GITHUB_SHA" -f event=push -f status=completed \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          echo "Successful build.yml push runs for $GITHUB_SHA: $count"
+          if [ "$count" -lt 1 ]; then
+            echo "build.yml has no successful push run for $GITHUB_SHA" >&2
+            exit 1
+          fi
+
+      # release-checks.yml runs the SQL Server tests and is dispatched by hand on the merged commit before tagging.
+      # Same scoping as above: the API is queried for that workflow file only.
+      - name: release-checks.yml passed for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/release-checks.yml/runs" \
+            -f head_sha="$GITHUB_SHA" -f event=workflow_dispatch -f status=completed \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          echo "Successful release-checks.yml runs for $GITHUB_SHA: $count"
+          if [ "$count" -lt 1 ]; then
+            echo "release-checks.yml has no successful dispatched run for $GITHUB_SHA; dispatch it on this commit before tagging" >&2
+            exit 1
+          fi
 
       # Only the package is packed: tests and the demo site are IsPackable=false.
       - name: Pack
