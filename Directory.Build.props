@@ -1,15 +1,19 @@
 <Project>
   <!--
     Lock files describe the floor: they are generated and committed at the default values below, and the floor CI
-    leg restores in locked mode. The latest CI leg overrides all four properties with 17.* and restores unlocked
+    leg restores in locked mode. The latest CI leg overrides all six properties with 17.* and restores unlocked
     (force-evaluate, RestoreLockedMode=false); the lock files it rewrites are never committed.
     The defaults match the package's minimum Umbraco and Forms versions, so tests and the demo run at the floor.
   -->
   <PropertyGroup>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">17.7.0</UmbracoTestVersion>
-    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">17.5.2</FormsTestVersion>
-    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">17.7.0</UmbracoDemoVersion>
-    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">17.5.2</FormsDemoVersion>
+    <!-- The package's own Umbraco and Forms references, as NuGet ranges. UmbracoCmsVersion feeds all four CMS references
+         (including Umbraco.Cms.Api.Management) so they can never drift apart. CI's latest leg replaces them with 17.*. -->
+    <UmbracoCmsVersion Condition="'$(UmbracoCmsVersion)' == ''">[17.8.0, 18.0.0)</UmbracoCmsVersion>
+    <UmbracoFormsVersion Condition="'$(UmbracoFormsVersion)' == ''">[17.6.2, 18.0.0)</UmbracoFormsVersion>
+    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">17.8.0</UmbracoTestVersion>
+    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">17.6.2</FormsTestVersion>
+    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">17.8.0</UmbracoDemoVersion>
+    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">17.6.2</FormsDemoVersion>
   </PropertyGroup>
 </Project>
