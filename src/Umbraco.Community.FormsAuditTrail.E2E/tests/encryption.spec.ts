@@ -1,4 +1,4 @@
-import { ACCESS_API_MISSING, accessDetail, hasAccessApi, lastAccessId, rowsSince, scan } from './support/audit';
+import { accessDetail, lastAccessId, rowsSince, scan } from './support/audit';
 import { test, expect } from './support/fixtures';
 import { listRecords, updateRecord } from './support/forms';
 
@@ -6,17 +6,15 @@ import { listRecords, updateRecord } from './support/forms';
 // would. The audit must diff what Forms' read path returns (plaintext) and never store the stored (reversed) form.
 // Needs E2E__SimulateEncryption=true; without it the encrypted form is not seeded.
 test.describe.serial('values held encrypted at rest', () => {
-  let accessApi = false;
   let before = 0;
   let editedId: number | undefined;
 
   test.beforeAll(async ({ admin, encryptedForm }) => {
-    accessApi = await hasAccessApi(admin);
 
     // Restore the seeded entry, stored reversed, so the spec can be run again on the same site.
     expect((await admin.post('/e2e/reseed-encrypted')).status()).toBe(204);
     const [row] = await listRecords(admin, encryptedForm);
-    before = accessApi ? await lastAccessId(admin) : 0;
+    before = await lastAccessId(admin);
 
     // The stand-in decrypts on Forms' record read only, not on the backoffice list, so the list shows the stored
     // text. A real encryption package would decrypt both; an editor then sends the plaintext, so this edit does too.
@@ -24,16 +22,17 @@ test.describe.serial('values held encrypted at rest', () => {
     expect(response.status()).toBe(200);
   });
 
-  test('stores neither the ciphertext nor the plaintext Email', async ({ admin }) => {
-    // Positive control: the new, non-sensitive Name is stored in clear, so this fails if capture is off.
-    expect((await scan(admin, 'Jane Doe')).length, 'the edit was captured').toBeGreaterThan(0);
+  test('stores neither the ciphertext nor the plaintext Email', async ({ admin, encryptedForm }) => {
+    // Positive control tied to this run's edit: an Edited row for the encrypted form written since the edit, plus the
+    // new non-sensitive Name stored in clear. "Jane Doe" alone is not enough, as earlier runs on the same site leave it.
+    expect(await rowsSince(admin, before, 'Edited', encryptedForm.id), 'this run\'s edit was captured').toHaveLength(1);
+    expect((await scan(admin, 'Jane Doe')).length, 'the new Name was stored in clear').toBeGreaterThan(0);
     expect(await scan(admin, 'htimS')).toEqual([]);
     expect(await scan(admin, 'moc.elpmaxe')).toEqual([]);
     expect(await scan(admin, 'jane.smith@example.test')).toEqual([]);
   });
 
   test('records exactly one Edited change, Name from Jane Smith to Jane Doe, and none for the unchanged Email', async ({ admin, encryptedForm }) => {
-    test.fixme(!accessApi, ACCESS_API_MISSING);
     const written = await rowsSince(admin, before, 'Edited', encryptedForm.id);
     expect(written).toHaveLength(1);
     editedId = written[0].id;

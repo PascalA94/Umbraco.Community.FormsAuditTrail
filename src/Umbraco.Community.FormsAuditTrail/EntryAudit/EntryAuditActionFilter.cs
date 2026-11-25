@@ -26,7 +26,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// 2026-11-16 with a README note, since a queued write could be lost. Health and the security accessor are singletons
 /// and the user is resolved per call, only for a failure's log line (P2).
 /// </remarks>
-public sealed class EntryAuditActionFilter(
+internal sealed class EntryAuditActionFilter(
     IOptionsMonitor<FormsAuditTrailOptions> options,
     EntryAuditHealth health,
     IBackOfficeSecurityAccessor securityAccessor,
@@ -85,7 +85,7 @@ public sealed class EntryAuditActionFilter(
     /// <summary>
     /// True when the action completed without an unhandled exception but with a result <see cref="IsSuccess"/> cannot
     /// classify, so whether Forms served anything is unknown. A denial is not unknown: it served nothing, so it must not
-    /// count as a failed audit, add an <c>AuditGap</c> or become a 503 (merge-fix 12).
+    /// count as a failed audit, add an <c>AuditGap</c> or become a 503.
     /// </summary>
     internal static bool IsUnrecognisedResult(ActionExecutedContext executed) =>
         (executed.Exception is null || executed.ExceptionHandled)
@@ -204,7 +204,7 @@ public sealed class EntryAuditActionFilter(
             reason,
             kind,
             formId,
-            CurrentUserKeyOrEmpty()));
+            AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
     }
 
     /// <summary>
@@ -226,18 +226,6 @@ public sealed class EntryAuditActionFilter(
         catch
         {
             return null;
-        }
-    }
-
-    private Guid CurrentUserKeyOrEmpty()
-    {
-        try
-        {
-            return AuditHandlerHelpers.TryGetCurrentUser(securityAccessor, out Guid key, out _) ? key : Guid.Empty;
-        }
-        catch
-        {
-            return Guid.Empty;
         }
     }
 

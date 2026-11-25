@@ -66,12 +66,12 @@ public class AuditConfigDto
 
     public DateTime? LastJobRunUtc { get; set; }
 
-    /// <summary>Null when edit values are not stored (<c>StoreEditValues</c> is None), since then there is nothing to warn about (R44).</summary>
+    /// <summary>Null when edit values are not stored (<c>StoreEditValues</c> is None), since then there is nothing to warn about.</summary>
     public bool? ForeignValueHandlers { get; set; }
 
     /// <summary>
     /// The configured edit-value mode. Sent as the enum name, not its number, so the dashboard does not depend on the
-    /// member order (R50).
+    /// member order.
     /// </summary>
     [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<Configuration.StoreEditValuesMode>))]
     public Configuration.StoreEditValuesMode? StoreEditValues { get; set; }

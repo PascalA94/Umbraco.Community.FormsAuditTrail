@@ -15,7 +15,7 @@ namespace Umbraco.Community.FormsAuditTrail.Authorization;
 /// Singleton, so the options subscription is made once. It only warns and never throws: a failed group lookup must not
 /// stop the site starting.
 /// </remarks>
-public sealed class AccessLogGroupAliasCheck : INotificationAsyncHandler<UmbracoApplicationStartedNotification>
+internal sealed class AccessLogGroupAliasCheck : INotificationAsyncHandler<UmbracoApplicationStartedNotification>
 {
     internal const int MaxGroupsChecked = 1000;
 

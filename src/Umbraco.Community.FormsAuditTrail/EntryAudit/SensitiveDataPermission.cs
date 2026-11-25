@@ -13,7 +13,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// The user comes from <see cref="IBackOfficeSecurityAccessor"/>, the source Forms' own masking call sites use, so the
 /// log never shows more than Forms would. It is read per call and never held (P2). Scoped, as the brief registers it.
 /// </remarks>
-public sealed class SensitiveDataPermission(IBackOfficeSecurityAccessor securityAccessor, ILogger<SensitiveDataPermission> logger)
+internal sealed class SensitiveDataPermission(IBackOfficeSecurityAccessor securityAccessor, ILogger<SensitiveDataPermission> logger)
     : ISensitiveDataPermission
 {
     public bool CurrentUserCanViewSensitiveData()

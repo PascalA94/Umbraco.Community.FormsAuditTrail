@@ -134,7 +134,6 @@ export class AuditRootElement extends UmbLitElement {
               id=${`tab-${tab}`}
               label=${TAB_LABELS[tab]}
               ?active=${tab === active}
-              aria-controls=${`panel-${tab}`}
               @click=${() => (this._activeTab = tab)}
               >${TAB_LABELS[tab]}</uui-tab
             >

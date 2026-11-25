@@ -63,7 +63,7 @@ export interface Subject {
 }
 
 /**
- * R49: an AuditSearched or AuditExported row says whose activity, and which event type, was asked about. Null when it
+ * An AuditSearched or AuditExported row says whose activity, and which event type, was asked about. Null when it
  * says neither. The server stores the event type as its number, so it is shown as the label (the number if unknown).
  */
 export function subjectOf(row: AccessEntryListDto): Subject | null {

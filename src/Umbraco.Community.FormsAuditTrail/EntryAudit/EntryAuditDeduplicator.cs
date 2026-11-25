@@ -17,7 +17,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// Adapted from UserActivity <c>Security/ViewThrottle.cs</c> (the same "has this viewer's view of this subject been
 /// logged inside the window" check), replacing its unbounded dictionary with a size-limited cache.
 /// </remarks>
-public sealed class EntryAuditDeduplicator(IOptionsMonitor<FormsAuditTrailOptions> options, TimeProvider time) : IDisposable
+internal sealed class EntryAuditDeduplicator(IOptionsMonitor<FormsAuditTrailOptions> options, TimeProvider time) : IDisposable
 {
     internal const int MaxEntries = 50_000;
 
@@ -54,7 +54,7 @@ public sealed class EntryAuditDeduplicator(IOptionsMonitor<FormsAuditTrailOption
     }
 
     /// <summary>
-    /// Forgets an event whose write failed (R33), so the next identical view is written instead of being suppressed for
+    /// Forgets an event whose write failed, so the next identical view is written instead of being suppressed for
     /// the rest of the window by a row that never reached the database.
     /// </summary>
     public void Release(AccessEventType type, Guid userKey, Guid formId, Guid? recordId, string filterHash)

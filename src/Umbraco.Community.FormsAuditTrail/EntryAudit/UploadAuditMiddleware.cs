@@ -17,7 +17,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// logs, only the hash of its path. The writer deduplicates on the path hash, so the several range requests a browser
 /// makes for one open give one row.
 /// </remarks>
-public sealed class UploadAuditMiddleware(RequestDelegate next)
+internal sealed class UploadAuditMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(
         HttpContext context,

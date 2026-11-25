@@ -9,7 +9,6 @@ using Umbraco.Cms.Core.Scoping;
 using Umbraco.Cms.Infrastructure.BackgroundJobs;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Community.FormsAuditTrail.BackgroundJobs;
-using Umbraco.Community.FormsAuditTrail.EntryAudit;
 using Umbraco.Community.FormsAuditTrail.Persistence;
 using Umbraco.Forms.Core.Data.Storage;
 using Umbraco.Forms.Core.Models;
@@ -32,7 +31,6 @@ namespace Umbraco.Community.FormsAuditTrail.DemoSite;
 public sealed class E2EDiagnosticsController(
     FormsAuditDbContext db,
     IEnumerable<IRecurringBackgroundJob> jobs,
-    IAuditStateStore state,
     IServiceProvider services,
     IWebHostEnvironment env,
     IConfiguration config) : ControllerBase, IActionFilter
@@ -102,8 +100,12 @@ public sealed class E2EDiagnosticsController(
     {
         AuditRetentionJob job = jobs.OfType<AuditRetentionJob>().Single();
         await job.RunJobAsync();
-        // The literal is the job's own state key; its constant is internal to the package.
-        string? lastRun = await state.GetAsync("job.lastRun", ct);
+        // The literal is the job's own state key; its constant and the state store are internal to the package, so the
+        // row is read through the public context. AsNoTracking so the job's write from its own scope is what comes back.
+        string? lastRun = await db.State.AsNoTracking()
+            .Where(s => s.Key == "job.lastRun")
+            .Select(s => s.Value)
+            .SingleOrDefaultAsync(ct);
         return Content(lastRun ?? "null", "application/json");
     }
 

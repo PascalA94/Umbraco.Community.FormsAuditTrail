@@ -19,7 +19,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// Adapted from UserActivity <c>Recorder/RecorderWriter.cs</c> (swallow, log the exception type, never block the caller),
 /// changed to log an Error with the event's identifiers because here a lost row is a compliance gap, not a nuisance.
 /// </remarks>
-public sealed class EntryAuditWriter(
+internal sealed class EntryAuditWriter(
     IServiceScopeFactory scopeFactory,
     EntryAuditDeduplicator deduplicator,
     EntryAuditHealth health,

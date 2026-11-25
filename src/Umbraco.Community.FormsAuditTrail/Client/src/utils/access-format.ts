@@ -108,7 +108,7 @@ export function offPeriodText(p: OffPeriodDto): string {
   return `Entry auditing was off from ${from} to ${to}`;
 }
 
-/** R42: null means the detector has not run, which must never read as "none found". */
+/** Null means the detector has not run, which must never read as "none found". */
 export function foreignHandlersText(cfg: AuditConfigDto): string {
   if (cfg.foreignValueHandlers === null || cfg.foreignValueHandlers === undefined) return 'Not checked';
   return cfg.foreignValueHandlers ? 'Found' : 'None found';

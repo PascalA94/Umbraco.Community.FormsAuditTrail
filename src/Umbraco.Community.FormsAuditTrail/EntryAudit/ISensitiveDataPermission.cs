@@ -6,5 +6,5 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// </summary>
 public interface ISensitiveDataPermission
 {
-    bool CurrentUserCanViewSensitiveData();
+    internal bool CurrentUserCanViewSensitiveData();
 }

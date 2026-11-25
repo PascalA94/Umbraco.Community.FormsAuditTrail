@@ -16,7 +16,7 @@ using FormsConstants = Umbraco.Forms.Core.Constants;
 namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 
 /// <summary>What the adapter must do once the capture is complete. Only an export can ever ask for a 503.</summary>
-public sealed record CaptureOutcome(bool ReplaceWith503)
+internal sealed record CaptureOutcome(bool ReplaceWith503)
 {
     internal static readonly CaptureOutcome None = new(false);
 }
@@ -30,7 +30,7 @@ public sealed record CaptureOutcome(bool ReplaceWith503)
 /// Scoped, one per request, alongside the scoped collector it opens a window on. The user is resolved when the write
 /// is built, through <see cref="AuditHandlerHelpers.TryGetCurrentUser"/>, and never held beyond the request (P2).
 /// </remarks>
-public sealed class EntryAuditCapture(
+internal sealed class EntryAuditCapture(
     EntryAuditCollector collector,
     IEntryAuditWriter writer,
     IOptionsMonitor<FormsAuditTrailOptions> options,
@@ -47,7 +47,7 @@ public sealed class EntryAuditCapture(
 
     /// <summary>
     /// The ids a bulk delete request named (S5: <c>RecordActionExecution.RecordKeys</c>), read before the action runs. Only
-    /// their count is ever stored, as <c>requestedCount</c>; they are never claimed or scrubbed (R63).
+    /// their count is ever stored, as <c>requestedCount</c>; they are never claimed or scrubbed.
     /// </summary>
     private IReadOnlyList<Guid> _requestedDeleteIds = [];
 
@@ -110,7 +110,7 @@ public sealed class EntryAuditCapture(
                 ex.GetType().Name,
                 kind,
                 formId,
-                CurrentUserKeyOrEmpty()));
+                AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
             return false;
         }
     }
@@ -160,7 +160,7 @@ public sealed class EntryAuditCapture(
                 SafeLog.Run(() => logger.LogError(
                     "FormsAuditTrail lost the capture window before it could record an access event: event {EventType}, user {UserKey}; the request is not recorded.",
                     kind,
-                    CurrentUserKeyOrEmpty()));
+                    AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
                 return new CaptureOutcome(FailsClosed(kind, options));
             }
 
@@ -177,7 +177,7 @@ public sealed class EntryAuditCapture(
                 ex.GetType().Name,
                 kind,
                 formId,
-                CurrentUserKeyOrEmpty()));
+                AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
             return new CaptureOutcome(FailsClosed(kind, options));
         }
     }
@@ -218,8 +218,8 @@ public sealed class EntryAuditCapture(
     /// <remarks>
     /// Runs before the action and never stops the edit (E12). With no before values the edit, if Forms accepts it, is
     /// still recorded without values as <c>beforeUnavailable</c>; that row is the evidence, so no case here is counted
-    /// as a health failure, which would add an <c>AuditGap</c> for a row that exists (R54). A missing form or record, or
-    /// a record of another form, is expected: Forms answers those requests with 404 itself (spike R54(0)).
+    /// as a health failure, which would add an <c>AuditGap</c> for a row that exists. A missing form or record, or
+    /// a record of another form, is expected: Forms answers those requests with 404 itself (M0 spike).
     /// </remarks>
     private void CaptureBeforeValues(Guid? formId, Guid? recordId)
     {
@@ -241,7 +241,7 @@ public sealed class EntryAuditCapture(
             }
             else if (record.Form != fid)
             {
-                // R54(2): never diff against another form's entry, whatever storage returns for the pair.
+                // Never diff against another form's entry, whatever storage returns for the pair.
                 missing = "record belongs to another form";
             }
 
@@ -267,12 +267,12 @@ public sealed class EntryAuditCapture(
                 ex.GetType().Name,
                 AccessEventType.Edited,
                 formId,
-                CurrentUserKeyOrEmpty()));
+                AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
         }
     }
 
     /// <summary>
-    /// R54(6): Forms reported failure after the handler had already seen the changed values at <c>RecordSaving</c>, so
+    /// Forms reported failure after the handler had already seen the changed values at <c>RecordSaving</c>, so
     /// the save may or may not have reached the database. Nothing is written, because a row would claim an edit that may
     /// not exist; the Warning lets an operator check the entry. Ids only, never values.
     /// </summary>
@@ -287,7 +287,7 @@ public sealed class EntryAuditCapture(
                     kind,
                     window.FormId,
                     window.RecordId,
-                    CurrentUserKeyOrEmpty()));
+                    AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
             }
         }
         catch
@@ -305,19 +305,6 @@ public sealed class EntryAuditCapture(
         catch
         {
             // Health is in memory; if even that fails there is nowhere left to report it.
-        }
-    }
-
-    /// <summary>For failure log lines only: the user may be the very thing that failed, and the log must still be written.</summary>
-    private Guid CurrentUserKeyOrEmpty()
-    {
-        try
-        {
-            return AuditHandlerHelpers.TryGetCurrentUser(securityAccessor, out Guid key, out _) ? key : Guid.Empty;
-        }
-        catch
-        {
-            return Guid.Empty;
         }
     }
 
@@ -365,11 +352,11 @@ public sealed class EntryAuditCapture(
         EntryAuditDetail raw = window.Detail;
         if (kind == AccessEventType.Exported && resultValue is PostGenerateExportController.GenerateExportResponseModel generated)
         {
-            // The download is matched to this row by file name (Task 11b), so both kinds must carry it.
+            // The download is matched to this row by file name (spec 6.2: the export row carries the file name), so both kinds must carry it.
             raw = raw with { FileName = generated.FileName };
         }
 
-        // R33: hashed before shaping, so two different searches stay two views when the term itself is not stored.
+        // Hashed before shaping, so two different searches stay two views when the term itself is not stored.
         // The hash lives only in the deduplicator's memory.
         string dedupeHash = raw.FilterHash();
         if (kind == AccessEventType.MemberSummaryViewed)
@@ -424,7 +411,7 @@ public sealed class EntryAuditCapture(
             Guid? responseId = CreatedRecordId(resultValue);
             if (responseId is { } created && recordId is { } saved && created != saved)
             {
-                // R54(3): the captions came from a different saved record than the one Forms reports creating.
+                // The captions came from a different saved record than the one Forms reports creating.
                 detail = detail with { FieldCaptions = null };
             }
 
@@ -475,7 +462,7 @@ public sealed class EntryAuditCapture(
                 IReadOnlyList<Guid> deleted = DeletedIds(window);
                 if (deleted.Count == 0)
                 {
-                    // R63: Forms returned 2xx but published no deletion, so nothing is claimed as deleted. The row
+                    // Forms returned 2xx but published no deletion, so nothing is claimed as deleted. The row
                     // still records the attempt and how many entries it asked for; reconciliation covers a deletion
                     // that happened without the notification.
                     recordId = null;
@@ -520,7 +507,7 @@ public sealed class EntryAuditCapture(
 
     /// <summary>
     /// The entries this delete request removed: only ids Forms published in <c>RecordDeleting</c> during the request,
-    /// for the request's form (R63). The request's own ids are never trusted, because a key Forms could not find, or one
+    /// for the request's form. The request's own ids are never trusted, because a key Forms could not find, or one
     /// from another form, publishes nothing; claiming it would put a false deletion in the log and scrub a live entry's
     /// edit history. A single delete is its route id, and only when Forms published it.
     /// </summary>
@@ -550,7 +537,7 @@ public sealed class EntryAuditCapture(
         window.Detail.Bulk == true ? _requestedDeleteIds.Distinct().Count() : window.RecordId is null ? 0 : 1;
 
     /// <summary>
-    /// R63: a delete that failed after Forms began deleting (a bulk action that throws partway) may have removed entries
+    /// A delete that failed after Forms began deleting (a bulk action that throws partway) may have removed entries
     /// with no Deleted row to show it. That is recorded as a failed Deleted event, so the next stored write leaves an
     /// <c>AuditGap</c> row. Nothing is scrubbed in the request: which entries went is unknown, and reconciliation scrubs
     /// whatever is really gone.
@@ -579,7 +566,7 @@ public sealed class EntryAuditCapture(
     }
 
     /// <summary>
-    /// The in-request erasure scrub (Task 14, both S5 branches): once Forms has returned 2xx its delete scope has
+    /// The in-request erasure scrub (spec 7.3, both S5 branches): once Forms has returned 2xx its delete scope has
     /// completed, so the deleted entries' stored edit values can be nulled now rather than by the next reconciliation.
     /// Limited to the request's form, so ids naming another form's records cannot erase that form's edit history.
     /// </summary>

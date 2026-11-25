@@ -42,10 +42,18 @@ public sealed class SimulatedDecryptionHandler(IFormService formService, ILogger
 
     public void Handle(RecordFetchingNotification notification)
     {
-        HashSet<Guid> textFields = formService.Get(notification.Record.Form)?.AllFields
+        // Only the seeded encrypted form stores reversed values. Reversing plaintext forms too would make the stand-in
+        // corrupt every other form's before values, which the capture specs rightly report as wrong.
+        var form = formService.Get(notification.Record.Form);
+        if (form?.Name != E2ESeeder.EncryptedFormName)
+        {
+            return;
+        }
+
+        HashSet<Guid> textFields = form.AllFields
             .Where(f => f.FieldTypeId == ShortTextFieldType)
             .Select(f => f.Id)
-            .ToHashSet() ?? [];
+            .ToHashSet();
 
         int reversed = 0;
         foreach (var field in notification.Record.RecordFields.Values.Where(f => textFields.Contains(f.FieldId)))

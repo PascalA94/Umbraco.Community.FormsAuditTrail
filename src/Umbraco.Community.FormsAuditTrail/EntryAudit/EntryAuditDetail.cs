@@ -12,7 +12,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// rather than <c>Filter</c> because <see cref="EntryAuditDetail.Filter"/> is the property that holds it and C# does
 /// not allow a nested type and a member of the same name.
 /// </summary>
-public sealed record EntryAuditFilter(
+internal sealed record EntryAuditFilter(
     DateTime? From,
     DateTime? To,
     string? State,
@@ -22,17 +22,17 @@ public sealed record EntryAuditFilter(
     string? SearchTerm);
 
 /// <summary>An option's value before and after a <c>ConfigChanged</c> row (E17).</summary>
-public sealed record ConfigValueChange(string? Old, string? New);
+internal sealed record ConfigValueChange(string? Old, string? New);
 
 /// <summary>What an <c>AuditGap</c> row summarises: the events the writer could not store (E18).</summary>
-public sealed record AuditGapInfo(int Count, DateTime FirstUtc, DateTime LastUtc, IReadOnlyList<string> EventTypes);
+internal sealed record AuditGapInfo(int Count, DateTime FirstUtc, DateTime LastUtc, IReadOnlyList<string> EventTypes);
 
 /// <summary>
 /// The minimised context stored in the access row's <c>Detail</c> column. Every property is an allow-listed key: a
 /// field value cannot reach the database through here because there is no property to hold one (SEC-02). The JSON is
 /// versioned (<c>"v":1</c>), camelCase and omits nulls.
 /// </summary>
-public sealed record EntryAuditDetail
+internal sealed record EntryAuditDetail
 {
     public const int DefaultMaxBytes = 8192;
 
@@ -82,7 +82,7 @@ public sealed record EntryAuditDetail
     /// <summary>The event type an access-log search filtered on (SEC-06).</summary>
     public int? EventType { get; init; }
 
-    /// <summary>How many entries a delete request asked for, kept when Forms published no deletion to prove them (R63).</summary>
+    /// <summary>How many entries a delete request asked for, kept when Forms published no deletion to prove them.</summary>
     public int? RequestedCount { get; init; }
 
     /// <summary>
@@ -150,13 +150,24 @@ public sealed record EntryAuditDetail
             return json;
         }
 
-        return Serialize(new EntryAuditDetail { Truncated = true });
+        // Last resort: the flags that say the row itself is incomplete survive, because without them a reader would take
+        // a row with no record ids, an empty form id or a "System" user as complete evidence (SEC-02). They are a few
+        // bytes, so the result still fits any limit the writer uses.
+        return Serialize(new EntryAuditDetail
+        {
+            RecordIdsCaptured = RecordIdsCaptured,
+            FormUnresolved = FormUnresolved,
+            UserUnresolved = UserUnresolved,
+            ValuesScrubIncomplete = ValuesScrubIncomplete,
+            SessionExpired = SessionExpired,
+            Truncated = true,
+        });
     }
 
     /// <summary>
     /// SHA-256 (lower-case hex) over this detail's filter JSON and paging, the dedupe key's filter part. It hashes
     /// whatever detail it is called on: the capture core calls it on the raw, unshaped detail so two different searches
-    /// stay apart when terms are not stored (R33), and uses the result for dedupe only. The hash is never stored.
+    /// stay apart when terms are not stored, and uses the result for dedupe only. The hash is never stored.
     /// </summary>
     public string FilterHash()
     {
