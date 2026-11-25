@@ -44,7 +44,43 @@ public class UserSummaryDto
 public class AuditConfigDto
 {
     public bool CsvExportEnabled { get; set; }
+
+    public bool EntryAuditEnabled { get; set; }
+
+    public bool CanReadAccessLog { get; set; }
+
+    public int AccessRetentionDays { get; set; }
+
+    public int EditValueRetentionDays { get; set; }
+
+    public bool EntryAuditCsvEnabled { get; set; }
+
+    // The members below are null unless CanReadAccessLog: health detail is for the people who read the log (T8).
+    public bool? EntryAuditHealthy { get; set; }
+
+    public List<string>? HealthReasons { get; set; }
+
+    public DateTime? LastWriteFailureUtc { get; set; }
+
+    public int? WriteFailuresSinceStart { get; set; }
+
+    public DateTime? LastJobRunUtc { get; set; }
+
+    /// <summary>Null when edit values are not stored (<c>StoreEditValues</c> is None), since then there is nothing to warn about.</summary>
+    public bool? ForeignValueHandlers { get; set; }
+
+    /// <summary>
+    /// The configured edit-value mode. Sent as the enum name, not its number, so the dashboard does not depend on the
+    /// member order.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<Configuration.StoreEditValuesMode>))]
+    public Configuration.StoreEditValuesMode? StoreEditValues { get; set; }
+
+    public List<OffPeriodDto>? OffPeriods { get; set; }
 }
+
+/// <param name="StartUnknown">True when the span was already open at the start of the retention window, so its real start is older and no longer stored.</param>
+public record OffPeriodDto(DateTime FromUtc, DateTime? ToUtc, bool StartUnknown = false);
 
 public class PagedResultDto<T>
 {

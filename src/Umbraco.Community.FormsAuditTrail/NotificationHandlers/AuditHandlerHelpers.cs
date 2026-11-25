@@ -46,4 +46,20 @@ internal static class AuditHandlerHelpers
         name = !string.IsNullOrEmpty(user.Name) ? user.Name : !string.IsNullOrEmpty(user.Username) ? user.Username : AuditUserNames.System;
         return true;
     }
+
+    /// <summary>
+    /// For failure log lines only: the user may be the very thing that failed, and the log line must still be written,
+    /// so any exception gives <see cref="Guid.Empty"/> rather than escaping (E12, SEC-02).
+    /// </summary>
+    public static Guid CurrentUserKeyOrEmpty(IBackOfficeSecurityAccessor accessor)
+    {
+        try
+        {
+            return TryGetCurrentUser(accessor, out Guid key, out _) ? key : Guid.Empty;
+        }
+        catch
+        {
+            return Guid.Empty;
+        }
+    }
 }

@@ -7,7 +7,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// <summary>
 /// The reasons are fixed strings because the dashboard shows them as they are.
 /// </summary>
-public sealed record EntryAuditHealthReport(
+internal sealed record EntryAuditHealthReport(
     bool Healthy,
     IReadOnlyList<string> Reasons,
     DateTime? LastWriteFailureUtc,
@@ -22,10 +22,10 @@ public sealed record EntryAuditHealthReport(
 /// </summary>
 public sealed class EntryAuditHealth
 {
-    public const string WriteFailuresReason = "writeFailures";
-    public const string MigrationsPendingReason = "migrationsPending";
-    public const string JobNotRunReason = "jobNotRun";
-    public const string JobStepFailedReason = "jobStepFailed";
+    internal const string WriteFailuresReason = "writeFailures";
+    internal const string MigrationsPendingReason = "migrationsPending";
+    internal const string JobNotRunReason = "jobNotRun";
+    internal const string JobStepFailedReason = "jobStepFailed";
 
     private static readonly TimeSpan JobStaleAfter = TimeSpan.FromHours(48);
 
@@ -49,15 +49,15 @@ public sealed class EntryAuditHealth
         _startedUtc = time.GetUtcNow().UtcDateTime;
     }
 
-    public bool MigrationsPending
+    internal bool MigrationsPending
     {
         get => Volatile.Read(ref _migrationsPending) == 1;
         set => Volatile.Write(ref _migrationsPending, value ? 1 : 0);
     }
 
-    public int WriteFailuresSinceStart => Volatile.Read(ref _writeFailuresSinceStart);
+    internal int WriteFailuresSinceStart => Volatile.Read(ref _writeFailuresSinceStart);
 
-    public DateTime? LastWriteFailureUtc
+    internal DateTime? LastWriteFailureUtc
     {
         get { lock (_gate) { return _lastFailureUtc; } }
     }
@@ -66,7 +66,7 @@ public sealed class EntryAuditHealth
     /// Contract: a writer calls this after every successful write and then <see cref="TakePendingGap"/>. Health reads as
     /// recovered only once the pending failures have been taken, so skipping the second call leaves it red.
     /// </remarks>
-    public void RecordWriteSuccess()
+    internal void RecordWriteSuccess()
     {
         lock (_gate)
         {
@@ -78,7 +78,7 @@ public sealed class EntryAuditHealth
     /// The form id is accepted so callers cannot be asked to drop it later, but it is not kept: the gap row records
     /// counts, times and event types, and holding ids for an unbounded outage would grow without limit.
     /// </remarks>
-    public void RecordWriteFailure(AccessEventType type, Guid formId)
+    internal void RecordWriteFailure(AccessEventType type, Guid formId)
     {
         _ = formId;
         Interlocked.Increment(ref _writeFailuresSinceStart);
@@ -101,7 +101,7 @@ public sealed class EntryAuditHealth
     /// <see cref="RecordWriteSuccess"/>. If the gap row then cannot be stored, hand the gap back with
     /// <see cref="RestorePendingGap"/> so the outage is not forgotten.
     /// </summary>
-    public AuditGapInfo? TakePendingGap()
+    internal AuditGapInfo? TakePendingGap()
     {
         lock (_gate)
         {
@@ -122,7 +122,7 @@ public sealed class EntryAuditHealth
     /// write stores the gap, which is deliberate: an unrecorded outage is exactly what the signal exists to flag.
     /// Does not count as a new write failure.
     /// </summary>
-    public void RestorePendingGap(AuditGapInfo gap)
+    internal void RestorePendingGap(AuditGapInfo gap)
     {
         ArgumentNullException.ThrowIfNull(gap);
         lock (_gate)
@@ -148,7 +148,7 @@ public sealed class EntryAuditHealth
         }
     }
 
-    public async Task<EntryAuditHealthReport> GetReportAsync(DateTime nowUtc, CancellationToken ct)
+    internal async Task<EntryAuditHealthReport> GetReportAsync(DateTime nowUtc, CancellationToken ct)
     {
         var reasons = new List<string>();
         DateTime? lastFailure;

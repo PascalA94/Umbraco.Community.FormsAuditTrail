@@ -14,7 +14,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// It runs inside Forms' search loop, about a hundred times per list page, so it does as little as possible and never
 /// throws: a failure here would break the backoffice entries list, not just the audit.
 /// </remarks>
-public sealed class EntrySearchResultFetchingHandler(
+internal sealed class EntrySearchResultFetchingHandler(
     IEntryAuditCollectorAccessor accessor,
     ILogger<EntrySearchResultFetchingHandler> logger) : INotificationHandler<EntrySearchResultFetchingNotification>
 {

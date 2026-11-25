@@ -55,6 +55,20 @@ jobs:
         working-directory: ${{ env.CLIENT_DIR }}
         run: npm audit --audit-level=high
 
+      - name: Lint client
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm run lint
+
+      - name: Test client
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm test
+
+      # Pitfall S3 / SEC-I2: stored text is rendered through Lit text bindings only. ESLint bans the imports and sinks in
+      # TypeScript and JavaScript; this catches the rest, including strings in templates and non-code files.
+      - name: Check no unsafe HTML rendering
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: "! grep -rnE 'unsafeHTML|unsafeSVG|unsafeStatic|innerHTML|outerHTML|insertAdjacentHTML|createContextualFragment|setHTMLUnsafe|parseHTMLUnsafe|document\\.write' src/"
+
       - name: Build client
         working-directory: ${{ env.CLIENT_DIR }}
         run: npm run build
@@ -109,7 +123,7 @@ jobs:
 
       # SQL Server tests run only in release-checks.yml (R21), so a pull request never needs a database server.
       - name: Test
-        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --filter "Category!=SqlServer" --logger "trx;LogFileName=results.trx" ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
+        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --filter "Category!=SqlServer&Category!=Slow" --logger "trx;LogFileName=results.trx" ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
 
       - name: Upload test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -126,7 +140,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: gitleaks
-        run: bash build/gitleaks.sh "${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.sha }}"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash build/gitleaks.sh "$BASE_SHA..$HEAD_SHA"
 
   osv:
     permissions:

@@ -121,6 +121,9 @@ public class EntryAuditOptionsTests
     [InlineData(true, null, true)]
     [InlineData(false, null, false)]
     [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, false)]
     public void EntryAuditCsvEnabled_FollowsEnableCsvExportUnlessSet(bool definition, bool? entryAudit, bool expected)
     {
         var o = new FormsAuditTrailOptions

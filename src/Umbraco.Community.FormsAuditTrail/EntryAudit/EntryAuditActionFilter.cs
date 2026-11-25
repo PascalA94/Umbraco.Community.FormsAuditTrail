@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,7 +26,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// 2026-11-16 with a README note, since a queued write could be lost. Health and the security accessor are singletons
 /// and the user is resolved per call, only for a failure's log line (P2).
 /// </remarks>
-public sealed class EntryAuditActionFilter(
+internal sealed class EntryAuditActionFilter(
     IOptionsMonitor<FormsAuditTrailOptions> options,
     EntryAuditHealth health,
     IBackOfficeSecurityAccessor securityAccessor,
@@ -83,11 +84,24 @@ public sealed class EntryAuditActionFilter(
 
     /// <summary>
     /// True when the action completed without an unhandled exception but with a result <see cref="IsSuccess"/> cannot
-    /// classify, so whether Forms served anything is unknown.
+    /// classify, so whether Forms served anything is unknown. A denial is not unknown: it served nothing, so it must not
+    /// count as a failed audit, add an <c>AuditGap</c> or become a 503.
     /// </summary>
     internal static bool IsUnrecognisedResult(ActionExecutedContext executed) =>
         (executed.Exception is null || executed.ExceptionHandled)
-        && executed.Result is not (FileResult or ObjectResult or StatusCodeResult);
+        && executed.Result is not (FileResult or ObjectResult or StatusCodeResult)
+        && !IsDenial(executed.Result);
+
+    /// <summary>
+    /// An authentication or authorisation outcome, or any result that states a non-2xx status. A result with no status
+    /// or a 2xx one could still have served the file, so it is left to <see cref="IsUnrecognisedResult"/>.
+    /// </summary>
+    private static bool IsDenial(IActionResult? result) => result switch
+    {
+        ForbidResult or ChallengeResult or SignOutResult => true,
+        IStatusCodeActionResult { StatusCode: { } status } => status is < 200 or > 299,
+        _ => false,
+    };
 
     /// <summary>
     /// Success as spec 7.1 step 4 defines it: no unhandled exception, and an object or status result with no status or a
@@ -190,7 +204,7 @@ public sealed class EntryAuditActionFilter(
             reason,
             kind,
             formId,
-            CurrentUserKeyOrEmpty()));
+            AuditHandlerHelpers.CurrentUserKeyOrEmpty(securityAccessor)));
     }
 
     /// <summary>
@@ -212,18 +226,6 @@ public sealed class EntryAuditActionFilter(
         catch
         {
             return null;
-        }
-    }
-
-    private Guid CurrentUserKeyOrEmpty()
-    {
-        try
-        {
-            return AuditHandlerHelpers.TryGetCurrentUser(securityAccessor, out Guid key, out _) ? key : Guid.Empty;
-        }
-        catch
-        {
-            return Guid.Empty;
         }
     }
 

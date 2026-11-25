@@ -1,0 +1,23 @@
+{
+  "name": "umbraco-community-forms-audit-trail-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright end-to-end tests for Umbraco.Community.FormsAuditTrail. Run locally against the demo site before each beta and stable release; not run in CI.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.0",
+    "@types/node": "24.19.2",
+    "axe-core": "4.14.0",
+    "dotenv": "18.0.9",
+    "playwright-core": "1.65.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=24.13"
+  }
+}

@@ -3,9 +3,12 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbraco.Community.FormsAuditTrail.Authorization;
 using Umbraco.Community.FormsAuditTrail.Configuration;
 using Umbraco.Community.FormsAuditTrail.Controllers.Dtos;
+using Umbraco.Community.FormsAuditTrail.EntryAudit;
 using Umbraco.Community.FormsAuditTrail.Models;
 using Umbraco.Community.FormsAuditTrail.Persistence;
 using Umbraco.Community.FormsAuditTrail.Services;
@@ -26,22 +29,203 @@ public class FormsAuditApiController : ControllerBase
     private readonly FormsAuditDbContext _db;
     private readonly IFormsSecurity _formsSecurity;
     private readonly IOptionsMonitor<FormsAuditTrailOptions> _options;
+    private readonly IAuthorizationService _authorization;
+    private readonly EntryAuditHealth _health;
+    private readonly TimeProvider _time;
+    private readonly IForeignValueHandlerDetector _foreignHandlers;
+    private readonly ILogger<FormsAuditApiController> _logger;
 
     public FormsAuditApiController(
         FormsAuditDbContext db,
         IFormsSecurity formsSecurity,
-        IOptionsMonitor<FormsAuditTrailOptions> options)
+        IOptionsMonitor<FormsAuditTrailOptions> options,
+        IAuthorizationService authorization,
+        EntryAuditHealth health,
+        TimeProvider time,
+        IForeignValueHandlerDetector foreignHandlers,
+        ILogger<FormsAuditApiController> logger)
     {
         _db = db;
         _formsSecurity = formsSecurity;
         _options = options;
+        _authorization = authorization;
+        _health = health;
+        _time = time;
+        _foreignHandlers = foreignHandlers;
+        _logger = logger;
     }
 
     [HttpGet("config")]
-    public ActionResult<AuditConfigDto> GetConfig() => Ok(new AuditConfigDto
+    public async Task<ActionResult<AuditConfigDto>> GetConfig(CancellationToken cancellationToken = default)
     {
-        CsvExportEnabled = _options.CurrentValue.EnableCsvExport,
-    });
+        FormsAuditTrailOptions options = _options.CurrentValue;
+        var dto = new AuditConfigDto
+        {
+            CsvExportEnabled = options.EnableCsvExport,
+            EntryAuditEnabled = options.EntryAudit.Enabled,
+            AccessRetentionDays = options.EntryAudit.RetentionDays,
+            EditValueRetentionDays = options.EntryAudit.EditValueRetentionDays,
+            EntryAuditCsvEnabled = options.EntryAuditCsvEnabled,
+        };
+
+        // A failing user lookup must not take the definition-audit config down with it; the caller just loses the access-log extras.
+        try
+        {
+            AuthorizationResult access = await _authorization.AuthorizeAsync(User, AccessLogPolicy.Name);
+            dto.CanReadAccessLog = access.Succeeded;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Could not evaluate the access-log policy for the config request ({ExceptionType}).", ex.GetType().Name);
+            dto.CanReadAccessLog = false;
+        }
+
+        if (!dto.CanReadAccessLog)
+        {
+            return Ok(dto);
+        }
+
+        EntryAuditHealthReport report = await _health.GetReportAsync(_time.GetUtcNow().UtcDateTime, cancellationToken);
+        dto.EntryAuditHealthy = report.Healthy;
+        dto.HealthReasons = report.Reasons.ToList();
+        dto.LastWriteFailureUtc = report.LastWriteFailureUtc;
+        dto.WriteFailuresSinceStart = report.WriteFailuresSinceStart;
+        dto.LastJobRunUtc = report.LastJobRunUtc;
+        dto.StoreEditValues = options.EntryAudit.StoreEditValues;
+        dto.ForeignValueHandlers = options.EntryAudit.StoreEditValues == StoreEditValuesMode.None
+            ? null
+            : _foreignHandlers.HasForeignValueHandlers;
+        dto.OffPeriods = await ReadOffPeriodsAsync(options, cancellationToken);
+        return Ok(dto);
+    }
+
+    /// <summary>
+    /// Turns <c>ConfigChanged</c> rows into the spans during which entry auditing was switched off (E17), oldest first.
+    /// A span opens when <c>Enabled</c> becomes false (including a first recorded value of false, since auditing was
+    /// then off from the start) and closes when it becomes true; an unclosed span has no end. Rows without a readable
+    /// <c>Enabled</c> change are skipped, so a malformed detail cannot hide the others.
+    /// </summary>
+    internal static IReadOnlyList<OffPeriodDto> ComputeOffPeriods(IEnumerable<FormAccessEntry> configChangedRows) =>
+        ComputeOffPeriods(configChangedRows, enabledNow: true, windowStartUtc: null);
+
+    /// <summary>
+    /// As above, plus the case the stored rows cannot show: auditing is off now, no open span was found, and the row that
+    /// switched it off is older than the retention window. A span starting at <paramref name="windowStartUtc"/> is then
+    /// added and flagged <c>StartUnknown</c>, so a long switch-off is never reported as "never off".
+    /// </summary>
+    internal static IReadOnlyList<OffPeriodDto> ComputeOffPeriods(IEnumerable<FormAccessEntry> configChangedRows, bool enabledNow, DateTime? windowStartUtc)
+    {
+        var periods = new List<OffPeriodDto>();
+        DateTime? openFrom = null;
+        DateTime? lastOnRow = null;
+        bool sawEnabledChange = false;
+        foreach (FormAccessEntry row in configChangedRows.OrderBy(r => r.Timestamp).ThenBy(r => r.Id))
+        {
+            string? newValue = ReadEnabledChange(row.Detail);
+            if (newValue is null)
+            {
+                continue;
+            }
+
+            sawEnabledChange = true;
+            lastOnRow = newValue == "true" ? row.Timestamp : null;
+
+            if (newValue == "false" && openFrom is null)
+            {
+                openFrom = row.Timestamp;
+            }
+            else if (newValue == "true" && openFrom is { } from)
+            {
+                periods.Add(new OffPeriodDto(from, row.Timestamp));
+                openFrom = null;
+            }
+        }
+
+        if (openFrom is { } stillOff)
+        {
+            periods.Add(new OffPeriodDto(stillOff, null));
+        }
+        else if (!enabledNow)
+        {
+            // Off now but no span left open by the rows. With no Enabled row in the window the switch-off is older than
+            // the window, so its start is unknown. Otherwise the newest Enabled row says on while the state says off (a
+            // queued or lost write): the span can start no earlier than that row, which closed any earlier span, so it
+            // opens there and is flagged unknown. It never starts at a row that already ended a period.
+            if (lastOnRow is { } disagreeing)
+            {
+                periods.Add(new OffPeriodDto(disagreeing, null, StartUnknown: true));
+            }
+            else if (!sawEnabledChange && windowStartUtc is { } windowStart)
+            {
+                periods.Add(new OffPeriodDto(windowStart, null, StartUnknown: true));
+            }
+        }
+
+        return periods;
+    }
+
+    private static string? ReadEnabledChange(string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return null;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(detail);
+            if (!document.RootElement.TryGetProperty("config", out JsonElement config) || config.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            // Keys are the option property names; matched case-insensitively so a future casing change cannot blind this.
+            foreach (JsonProperty property in config.EnumerateObject())
+            {
+                if (string.Equals(property.Name, nameof(EntryAuditOptions.Enabled), StringComparison.OrdinalIgnoreCase)
+                    && property.Value.ValueKind == JsonValueKind.Object
+                    && property.Value.TryGetProperty("new", out JsonElement newValue)
+                    && newValue.ValueKind == JsonValueKind.String)
+                {
+                    return newValue.GetString();
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Null (not checked) rather than an empty list when the lookup fails: an empty list would tell the dashboard that
+    /// auditing was never switched off, which is the claim this exists to prove.
+    /// </summary>
+    private async Task<List<OffPeriodDto>?> ReadOffPeriodsAsync(FormsAuditTrailOptions options, CancellationToken cancellationToken)
+    {
+        try
+        {
+            IQueryable<FormAccessEntry> rows = _db.AccessEntries.AsNoTracking()
+                .Where(e => e.EventType == (int)AccessEventType.ConfigChanged);
+            DateTime? windowStart = null;
+            if (options.EntryAudit.RetentionDays > 0)
+            {
+                DateTime cutoff = _time.GetUtcNow().UtcDateTime.AddDays(-options.EntryAudit.RetentionDays);
+                windowStart = cutoff;
+                rows = rows.Where(e => e.Timestamp >= cutoff);
+            }
+
+            List<FormAccessEntry> configRows = await rows.OrderBy(e => e.Timestamp).ThenBy(e => e.Id).ToListAsync(cancellationToken);
+            return ComputeOffPeriods(configRows, options.EntryAudit.Enabled, windowStart).ToList();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Could not read the entry audit off periods ({ExceptionType}).", ex.GetType().Name);
+            return null;
+        }
+    }
 
     [HttpGet("entries")]
     public async Task<ActionResult<PagedResultDto<AuditEntryListDto>>> GetEntries(

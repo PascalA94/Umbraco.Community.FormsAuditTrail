@@ -4,11 +4,11 @@ export const manifests: ManifestDashboard[] = [
   {
     type: 'dashboard',
     alias: 'UmbracoCommunity.FormsAuditTrail.Dashboard',
-    name: 'Forms Audit Trail',
-    elementName: 'forms-audit-dashboard',
+    name: 'Audit',
+    elementName: 'forms-audit-root',
     weight: 20,
     meta: {
-      label: 'Forms Audit Trail',
+      label: 'Audit',
       pathname: 'forms-audit-trail',
     },
     conditions: [

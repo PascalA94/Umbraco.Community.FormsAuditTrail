@@ -12,7 +12,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// <summary>Tells the dashboard whether another package may be transforming entry values (for example encrypting them).</summary>
 public interface IForeignValueHandlerDetector
 {
-    bool HasForeignValueHandlers { get; }
+    internal bool HasForeignValueHandlers { get; }
 }
 
 /// <summary>

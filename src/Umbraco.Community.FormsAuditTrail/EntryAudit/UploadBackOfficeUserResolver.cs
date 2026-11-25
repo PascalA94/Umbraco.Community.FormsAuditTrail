@@ -9,13 +9,13 @@ using Umbraco.Cms.Core.Services;
 namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 
 /// <summary>The backoffice user behind an upload request.</summary>
-public sealed record UploadUser(Guid Key, string Name, bool SessionExpired = false);
+internal sealed record UploadUser(Guid Key, string Name, bool SessionExpired = false);
 
 /// <summary>
 /// Resolves the user for a request at <c>PrePipeline</c>, where <c>HttpContext.User</c> is not authenticated yet (S11).
 /// It never throws: a missing, malformed or expired cookie is an unresolved user, and the response is never touched.
 /// </summary>
-public interface IUploadUserResolver
+internal interface IUploadUserResolver
 {
     UploadUser? Resolve(HttpContext context);
 }
@@ -29,7 +29,7 @@ public interface IUploadUserResolver
 /// holds a service whose lifetime it does not control (P2). The ticket's expiry is reported, not enforced, because the
 /// data format only decrypts and the audit records what happened rather than deciding access.
 /// </remarks>
-public sealed class UploadBackOfficeUserResolver(
+internal sealed class UploadBackOfficeUserResolver(
     IOptionsMonitor<CookieAuthenticationOptions> cookieOptions,
     TimeProvider time) : IUploadUserResolver
 {
