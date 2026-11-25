@@ -30,16 +30,24 @@
   ],
   "Screenshots": [
     {
+      "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-04-entry-access.png",
+      "Caption": "Entry access: who viewed a list, opened an entry, edited one, exported entries and opened an uploaded file."
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-05-entry-history.png",
+      "Caption": "Entry history: everything that has happened to one entry, newest first."
+    },
+    {
       "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png",
-      "Caption": "Design changes across every form: who changed what and when, with filters and CSV export."
+      "Caption": "Form changes: design changes across every form, with filters and CSV export."
     },
     {
       "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-02-change-details.png",
-      "Caption": "One change opened to show its field-level diff: added, removed, modified and moved."
+      "Caption": "One change opened to show its field-level diff: what was removed, added and renamed."
     },
     {
       "ImageUrl": "https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-03-filters.png",
-      "Caption": "Filtered to a single form (Contact us), showing its history from creation through every later edit."
+      "Caption": "Filtered to a single form (Contact us) to see its saves in order."
     }
   ]
 }

@@ -15,7 +15,7 @@ This package keeps two records in one backoffice dashboard.
 
 Both are view-only. The package never changes, blocks or rolls back anything in Forms, unless you switch on `FailClosedOnExport`, which can refuse an export (see [Configuration](#configuration)).
 
-![Forms Audit Trail dashboard in the Forms section, listing design changes across all forms with filters and an Export CSV button](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png)
+![Entry access tab listing who viewed a list, opened an entry, edited an entry, exported entries and opened an uploaded file](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-04-entry-access.png)
 
 ### What is recorded
 
@@ -42,6 +42,28 @@ Every row holds the time, the backoffice user (name and key), the form and, wher
 - Edit values in the access-log CSV. They stay in the backoffice.
 
 The full list of what the audit does not see is under [What is not captured](#what-is-not-captured).
+
+## Screenshots
+
+**Entry access.** Who viewed a list, opened an entry, edited one, exported entries and opened an uploaded file. The names and entries are demo data.
+
+![Entry access tab with rows for a list view, opened entries, two edits with a View changes button, an export, its download and an uploaded file](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-04-entry-access.png)
+
+**Entry history.** Everything that has happened to one entry, newest first.
+
+![Entry history tab showing the views, an edit and the exports that touched one entry](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-05-entry-history.png)
+
+**Form changes.** Design changes across every form, with filters and CSV export.
+
+![Form changes tab listing design changes across all forms, with the Form, Event, User and Date range filters and an Export CSV button](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-01-audit-trail.png)
+
+**One change opened.** The field-level diff: what was removed, added and renamed.
+
+![Change detail for one save of the Contact us form, showing a removed field, an added field and a renamed field](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-02-change-details.png)
+
+**Filtered to one form.** The Contact us form's history, filtered with the Form drop-down.
+
+![Form changes tab filtered to the Contact us form, showing its four saves](https://raw.githubusercontent.com/PascalA94/Umbraco.Community.FormsAuditTrail/main/assets/screenshots/screenshot-03-filters.png)
 
 ## Compared with Forms' built-in history
 
