@@ -15,7 +15,7 @@ internal static class CsvFormatter
             return string.Empty;
         }
 
-        if (value[0] is '=' or '+' or '-' or '@' or '\t')
+        if (StartsLikeFormula(value))
         {
             value = "'" + value;
         }
@@ -26,5 +26,28 @@ internal static class CsvFormatter
         }
 
         return value;
+    }
+
+    // SEC-L1: Excel and Sheets skip leading blanks before deciding a cell is a formula, so " =1+1" is as dangerous as
+    // "=1+1". A leading tab or carriage return is dangerous on its own because some importers strip it as whitespace.
+    private static bool StartsLikeFormula(string value)
+    {
+        if (value[0] is '\t' or '\r')
+        {
+            return true;
+        }
+
+        foreach (char c in value)
+        {
+            if (char.IsWhiteSpace(c))
+            {
+                continue;
+            }
+
+            // The full-width forms are what some spreadsheet locales and IMEs normalise to the ASCII trigger.
+            return c is '=' or '+' or '-' or '@' or '\uFF0B' or '\uFF0D' or '\uFF1D' or '\uFF20';
+        }
+
+        return false;
     }
 }

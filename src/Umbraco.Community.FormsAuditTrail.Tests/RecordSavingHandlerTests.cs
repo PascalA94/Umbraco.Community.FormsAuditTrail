@@ -178,6 +178,27 @@ public sealed class RecordSavingHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Saving_RecordOfOtherForm_DoesNothing() // @M3-T13b R54(2)
+    {
+        OpenEdited((Name, ["old"]));
+        Record edit = Saved(5, (Name, ["new"]));
+        edit.Form = Guid.NewGuid();
+
+        Handle(edit);
+
+        Assert.Empty(_collector.Window!.Changes);
+
+        _collector.Open(AccessEventType.Created, FormId, null, new EntryAuditDetail());
+        Record created = Saved(0, (Name, ["x"]));
+        created.Form = Guid.NewGuid();
+
+        Handle(created);
+
+        Assert.Null(_collector.Window!.Detail.FieldCaptions);
+        Assert.Null(_collector.Window.RecordId);
+    }
+
+    [Fact]
     public void Saving_StoresDiffOnCollector_DoesNotWrite() // @M3-T13b
     {
         Type[] parameters = typeof(RecordSavingHandler).GetConstructors().Single().GetParameters().Select(p => p.ParameterType).ToArray();

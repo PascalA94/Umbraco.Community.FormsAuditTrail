@@ -157,6 +157,84 @@ public class AuditRetentionJobTests : IDisposable
         Assert.Equal(0, await _db.Context.AccessEntries.CountAsync());
     }
 
+    private static readonly Guid SweepField = Guid.NewGuid();
+
+    private FormAccessEntry SeedFieldEdit(Guid record, Guid field, string? oldValue, string? newValue, bool cleared, DateTime at) =>
+        _db.AddAccess(
+            AccessEventType.Edited, Guid.NewGuid(), at, recordId: record,
+            changes: [new FormEntryChange { FieldId = field, FieldCaption = "Email", OldValue = oldValue, NewValue = newValue, Cleared = cleared }]);
+
+    [Fact]
+    public async Task ClearedValueSweep_ScrubsEarlierRowsOfAClearedField_OnlyThatRecordAndField() // @M4-FIX R73 item 2
+    {
+        Guid record = Guid.NewGuid();
+        Guid other = Guid.NewGuid();
+        FormAccessEntry earlier = SeedFieldEdit(record, SweepField, "a", "b", false, Now.AddDays(-3));
+        SeedFieldEdit(record, SweepField, null, null, true, Now.AddDays(-2));
+        FormAccessEntry otherField = SeedFieldEdit(record, Guid.NewGuid(), "x", "y", false, Now.AddDays(-3));
+        FormAccessEntry otherRecord = SeedFieldEdit(other, SweepField, "m", "n", false, Now.AddDays(-3));
+        FormAccessEntry afterClear = SeedFieldEdit(record, SweepField, null, "refilled", false, Now.AddDays(-1));
+
+        await Job().RunJobAsync();
+
+        _db.Context.ChangeTracker.Clear();
+        Dictionary<long, FormEntryChange> rows = await _db.Context.EntryChanges.AsNoTracking().ToDictionaryAsync(c => c.AccessId);
+        Assert.Null(rows[earlier.Id].NewValue);
+        Assert.Equal(Now, rows[earlier.Id].ValuesScrubbedAt);
+        Assert.Equal("y", rows[otherField.Id].NewValue);
+        Assert.Equal("n", rows[otherRecord.Id].NewValue);
+        Assert.Equal("refilled", rows[afterClear.Id].NewValue);
+        Assert.Equal("ok:1", (await LastRunAsync()).Steps["clearedValueSweep"]);
+    }
+
+    [Fact]
+    public async Task ClearedValueSweep_12000Rows_ThreeBatchedStatements() // @M4-FIX item 22
+    {
+        Guid record = Guid.NewGuid();
+        _db.AddAccess(
+            AccessEventType.Edited, Guid.NewGuid(), Now.AddDays(-3), recordId: record,
+            changes: Enumerable.Range(0, 12000).Select(_ => new FormEntryChange
+            {
+                FieldId = SweepField, FieldCaption = "Email", OldValue = "a", NewValue = "b",
+            }).ToList());
+        SeedFieldEdit(record, SweepField, "b", null, true, Now.AddDays(-2));
+        _counter.Commands.Clear();
+
+        var swept = await AuditRetentionJob.ScrubEarlierValuesOfClearedFieldsAsync(_db.Context, Now, batchSize: 5000);
+
+        Assert.Equal(12000, swept);
+        Assert.Equal(3, _counter.Count("UPDATE"));
+        Assert.Equal(0, await _db.Context.EntryChanges.CountAsync(c => c.NewValue != null));
+        Assert.Equal(0, await AuditRetentionJob.ScrubEarlierValuesOfClearedFieldsAsync(_db.Context, Now, batchSize: 5000));
+    }
+
+    [Fact]
+    public async Task ClearedValueSweep_NothingPending_IsANoOp() // @M4-FIX R73 item 2
+    {
+        SeedFieldEdit(Guid.NewGuid(), SweepField, "a", "b", false, Now.AddDays(-3));
+
+        await Job().RunJobAsync();
+
+        Assert.Equal("ok:0", (await LastRunAsync()).Steps["clearedValueSweep"]);
+        _db.Context.ChangeTracker.Clear();
+        Assert.Equal("b", (await _db.Context.EntryChanges.AsNoTracking().SingleAsync()).NewValue);
+    }
+
+    [Fact]
+    public async Task ClearedValueSweep_KeepClearedValues_IsSkipped() // @M4-FIX R73 item 2
+    {
+        _options.EntryAudit.KeepClearedValues = true;
+        Guid record = Guid.NewGuid();
+        FormAccessEntry earlier = SeedFieldEdit(record, SweepField, "a", "b", false, Now.AddDays(-3));
+        SeedFieldEdit(record, SweepField, "b", null, true, Now.AddDays(-2));
+
+        await Job().RunJobAsync();
+
+        Assert.Equal("skipped", (await LastRunAsync()).Steps["clearedValueSweep"]);
+        _db.Context.ChangeTracker.Clear();
+        Assert.Equal("b", (await _db.Context.EntryChanges.AsNoTracking().SingleAsync(c => c.AccessId == earlier.Id)).NewValue);
+    }
+
     [Fact]
     public async Task ExpireEditValues_NullsValuesOlderThanCutoff_KeepsRows()
     {
@@ -240,6 +318,52 @@ public class AuditRetentionJobTests : IDisposable
         Assert.Equal(5, deleted);
         Assert.Equal(5, await context.AccessEntries.CountAsync());
         Assert.Equal(5, await context.EntryChanges.CountAsync());
+    }
+
+    [SqlServerFact]
+    [Trait("Category", "SqlServer")]
+    public async Task ClearedValueSweep_Batched_OnSqlServer() // @M4-FIX item 22
+    {
+        using var database = SqlServerTestDatabase.Create();
+        await using SqlServerFormsAuditDbContext context = database.CreateContext();
+        await context.Database.MigrateAsync();
+        Guid record = Guid.NewGuid();
+        Guid other = Guid.NewGuid();
+        Guid field = Guid.NewGuid();
+
+        long Seed(Guid rec, Guid fld, string? oldValue, string? newValue, bool cleared, DateTime at)
+        {
+            var access = new FormAccessEntry
+            {
+                Timestamp = at, EventType = (int)AccessEventType.Edited, FormId = Guid.NewGuid(), FormName = "F",
+                RecordId = rec, UserKey = Guid.NewGuid(), UserName = "U",
+            };
+            access.Changes.Add(new FormEntryChange { FieldId = fld, FieldCaption = "C", OldValue = oldValue, NewValue = newValue, Cleared = cleared });
+            context.AccessEntries.Add(access);
+            context.SaveChanges();
+            return access.Id;
+        }
+
+        // Several earlier rows so batchSize 2 needs more than one pass.
+        long[] earlier = Enumerable.Range(0, 5).Select(i => Seed(record, field, "a", "b", false, Now.AddDays(-5 + i))).ToArray();
+        long otherRecord = Seed(other, field, "m", "n", false, Now.AddDays(-5));
+        Seed(record, field, "b", null, true, Now.AddDays(-2));
+        long refilled = Seed(record, field, null, "refilled", false, Now.AddDays(-1));
+        context.ChangeTracker.Clear();
+
+        Assert.Equal(5, await AuditRetentionJob.ScrubEarlierValuesOfClearedFieldsAsync(context, Now, batchSize: 2));
+
+        context.ChangeTracker.Clear();
+        Dictionary<long, FormEntryChange> rows = await context.EntryChanges.AsNoTracking().ToDictionaryAsync(c => c.AccessId);
+        foreach (var id in earlier)
+        {
+            Assert.Null(rows[id].NewValue);
+            Assert.Equal(Now, rows[id].ValuesScrubbedAt);
+        }
+
+        Assert.Equal("n", rows[otherRecord].NewValue);
+        Assert.Equal("refilled", rows[refilled].NewValue);
+        Assert.Equal(0, await AuditRetentionJob.ScrubEarlierValuesOfClearedFieldsAsync(context, Now, batchSize: 2));
     }
 
     private async Task SeedUnscrubbedEditsAsync(int count)

@@ -4,9 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Umbraco.Cms.Core.Events;
 using Umbraco.Community.FormsAuditTrail.Configuration;
 using Umbraco.Community.FormsAuditTrail.EntryAudit;
 using Umbraco.Community.FormsAuditTrail.Models;
+using Umbraco.Forms.Core.Services.Notifications;
 using Umbraco.Forms.Web.Api.ManagementApi.Export;
 using Umbraco.Forms.Web.Api.ManagementApi.Member;
 using Umbraco.Forms.Web.Api.ManagementApi.Record;
@@ -442,7 +444,7 @@ public sealed class EntryAuditActionFilterTests : IDisposable
     }
 
     [Fact]
-    public async Task Filter_ExecuteAction_Delete_OpensDeletedWindow_WritesNothingUntilTask14() // @M2-T12
+    public async Task Filter_ExecuteAction_Delete_OpensDeletedWindowAndWritesDeleted() // @M2-T12 @M3-T14
     {
         Dictionary<string, object?> route = FormRoute();
         route["actionId"] = FormsConstants.RecordSetActionTypes.DeleteRecordSet.ToLowerInvariant();
@@ -450,7 +452,7 @@ public sealed class EntryAuditActionFilterTests : IDisposable
         await _h.RunAsync(typeof(ExecuteActionController), route, result: () => new OkResult());
 
         Assert.Equal(AccessEventType.Deleted, Collector().Window?.Kind);
-        Assert.Empty(_h.Writes);
+        Assert.Equal(AccessEventType.Deleted, Assert.Single(_h.Writes).EventType);
         Assert.Equal(0, _h.Health.WriteFailuresSinceStart); // @M2-FIX A1
     }
 
@@ -552,16 +554,6 @@ public sealed class EntryAuditActionFilterTests : IDisposable
         Assert.Equal(503, Assert.IsType<StatusCodeResult>(executed.Result).StatusCode);
         Assert.Empty(_h.Writes);
         await AssertOneFailureThenGapRow(); // @M2-FIX A1 SEC-02
-    }
-
-    [Fact]
-    public async Task Filter_DeleteRecordRoute_WritesNothingUntilTask14() // @M2-T12 R37(5)
-    {
-        await _h.RunAsync(typeof(DeleteRecordController), FormRoute(RecordId), result: () => new OkResult());
-
-        Assert.Equal(AccessEventType.Deleted, Collector().Window?.Kind);
-        Assert.Empty(_h.Writes);
-        Assert.Equal(0, _h.Health.WriteFailuresSinceStart); // @M2-FIX A1
     }
 
     [Fact]
@@ -707,7 +699,7 @@ public sealed class EntryAuditActionFilterTests : IDisposable
     }
 
     [Fact]
-    public async Task Filter_Edited_BeforeValuesViaRecordStorage_TransformingHandler_DiffCorrect() // @M3-T13b T11 SEC-04
+    public async Task Filter_Edited_StorageReturnsClearText_DiffComparesClearTextOnly() // @M3-T13b T11 SEC-04
     {
         KnowFields();
         // The stored bytes are "encrypted" (reversed); Forms' read path, standing in for a decrypting handler, hands back
@@ -741,9 +733,159 @@ public sealed class EntryAuditActionFilterTests : IDisposable
         Assert.Equal(RecordId, write.RecordId);
         Assert.Empty(write.Changes);
         Assert.True(write.Detail!.BeforeUnavailable);
-        Assert.Equal(1, _h.Health.WriteFailuresSinceStart);
         Assert.Contains(_h.CaptureLog.Entries, e => e.Level == LogLevel.Error);
         Assert.DoesNotContain(_h.CaptureLog.Entries, e => e.Message.Contains("SENTINEL-STORAGE", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Filter_Edited_RecordNotFound_Forms404_NoHealthFailure_NoGap() // @M3-T13b R54(1)
+    {
+        // Spike R54(0): Forms answers 404 itself for an unknown record or a record of another form.
+        _h.RecordStorage.GetRecordByUniqueId(Arg.Any<Guid>(), Arg.Any<Umbraco.Forms.Core.Models.Form>()).Returns((Umbraco.Forms.Core.Persistence.Dtos.Record?)null);
+
+        await _h.RunAsync(typeof(UpdateRecordController), FormRoute(RecordId), result: () => new NotFoundObjectResult(new object()));
+
+        Assert.Empty(_h.Writes);
+        Assert.Equal(0, _h.Health.WriteFailuresSinceStart);
+        Assert.Null(_h.Health.TakePendingGap());
+        Assert.Contains(_h.CaptureLog.Entries, e => e.Level == LogLevel.Warning);
+        Assert.DoesNotContain(_h.CaptureLog.Entries, e => e.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Filter_Edited_ReadThrows_2xx_NoAuditGapForWrittenRow() // @M3-T13b R54(1)
+    {
+        _h.RecordStorage.GetRecordByUniqueId(Arg.Any<Guid>(), Arg.Any<Umbraco.Forms.Core.Models.Form>())
+            .Returns(_ => throw new InvalidOperationException("storage down"));
+
+        await RunEdit(after: [(NameField, ["new"])]);
+
+        AccessWrite write = Assert.Single(_h.Writes);
+        Assert.True(write.Detail!.BeforeUnavailable);
+        Assert.Equal(0, _h.Health.WriteFailuresSinceStart);
+        Assert.Null(_h.Health.TakePendingGap());
+        Assert.Contains(_h.CaptureLog.Entries, e => e.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Filter_Edited_StoredRecordOtherForm_NoValuesStored() // @M3-T13b R54(2)
+    {
+        KnowFields();
+        Umbraco.Forms.Core.Persistence.Dtos.Record other = StoredWith(RecordId, 7, (NameField, ["SENTINEL-OTHER-FORM"]));
+        other.Form = Guid.NewGuid();
+        _h.StoredRecord = other;
+        _h.Options.EntryAudit.StoreEditValues = StoreEditValuesMode.All;
+
+        await RunEdit(after: [(NameField, ["new"])]);
+
+        AccessWrite write = Assert.Single(_h.Writes);
+        Assert.Empty(write.Changes);
+        Assert.True(write.Detail!.BeforeUnavailable);
+        Assert.DoesNotContain("SENTINEL-OTHER-FORM", System.Text.Json.JsonSerializer.Serialize(write), StringComparison.Ordinal);
+        Assert.Equal(0, _h.Health.WriteFailuresSinceStart);
+    }
+
+    [Fact]
+    public async Task Filter_Edited_ThroughFormsReadPath_ForeignFetchHandlerTransformsBeforeValues() // @M3-T13b R54(4) T11 SEC-04
+    {
+        KnowFields();
+        _h.Options.EntryAudit.StoreEditValues = StoreEditValuesMode.All;
+        // At rest the values are "encrypted" (reversed). The storage plays Forms' read path (S2, S10): it loads the raw
+        // record and publishes RecordFetchingNotification to every registered handler, a foreign decrypting one included,
+        // before returning it. Only a read through that path can see clear text.
+        var foreign = new ReversingFetchHandler();
+        INotificationHandler<RecordFetchingNotification>[] registered = [_h.RecordHandler, foreign];
+        _h.RecordStorage.GetRecordByUniqueId(RecordId, Arg.Any<Umbraco.Forms.Core.Models.Form>()).Returns(_ =>
+        {
+            Umbraco.Forms.Core.Persistence.Dtos.Record raw = StoredWith(RecordId, 7, (NameField, ["ecilA"]), (EmailField, ["tset.elpmaxe@a"]));
+            var notification = new RecordFetchingNotification(raw, new Umbraco.Cms.Core.Events.EventMessages());
+            foreach (INotificationHandler<RecordFetchingNotification> handler in registered)
+            {
+                handler.Handle(notification);
+            }
+
+            return raw;
+        });
+
+        await RunEdit(after: [(NameField, ["Alicia"]), (EmailField, ["a@example.test"])]);
+
+        Assert.Equal(1, foreign.Calls);
+        AccessWrite write = Assert.Single(_h.Writes);
+        EntryFieldChange change = Assert.Single(write.Changes);
+        Assert.Equal(("Alice", "Alicia"), (change.OldValue, change.NewValue));
+    }
+
+    [Fact]
+    public async Task Filter_Edited_Non2xxWithChanges_LogsOutcomeUnknownWarning() // @M3-T13b R54(6)
+    {
+        _h.StoredRecord = StoredWith(RecordId, 7, (NameField, ["SENTINEL-OLD"]));
+
+        await RunEdit(result: () => new StatusCodeResult(500), after: [(NameField, ["SENTINEL-NEW"])]);
+
+        Assert.Empty(_h.Writes);
+        (LogLevel level, string message) = Assert.Single(_h.CaptureLog.Entries, e => e.Message.Contains("edit outcome unknown", StringComparison.Ordinal));
+        Assert.Equal(LogLevel.Warning, level);
+        Assert.Contains(RecordId.ToString(), message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SENTINEL", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Filter_Edited_Non2xxNoChanges_NoOutcomeWarning() // @M3-T13b R54(6)
+    {
+        await RunEdit(result: () => new BadRequestResult(), after: []);
+
+        Assert.DoesNotContain(_h.CaptureLog.Entries, e => e.Message.Contains("edit outcome unknown", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Filter_Create_ResponseIdDiffersFromSavedRecord_DropsCaptions() // @M3-T13b R54(3)
+    {
+        KnowFields();
+        Guid responseId = Guid.NewGuid();
+
+        await _h.RunAsync(
+            typeof(CreateRecordController),
+            FormRoute(),
+            result: () => new ObjectResult(new { id = responseId }) { StatusCode = 201 },
+            duringAction: () => _h.SaveRecord(StoredWith(Guid.NewGuid(), 0, (NameField, ["x"]))));
+
+        AccessWrite write = Assert.Single(_h.Writes);
+        Assert.Equal(responseId, write.RecordId);
+        Assert.Null(write.Detail!.FieldCaptions);
+    }
+
+    [Fact]
+    public async Task Filter_Create_SavedRecordOfOtherForm_NoCaptions() // @M3-T13b R54(2)(3)
+    {
+        KnowFields();
+        Guid newId = Guid.NewGuid();
+        Umbraco.Forms.Core.Persistence.Dtos.Record saved = StoredWith(newId, 0, (NameField, ["x"]));
+        saved.Form = Guid.NewGuid();
+
+        await _h.RunAsync(
+            typeof(CreateRecordController),
+            FormRoute(),
+            result: () => new ObjectResult(new { id = newId }) { StatusCode = 201 },
+            duringAction: () => _h.SaveRecord(saved));
+
+        AccessWrite write = Assert.Single(_h.Writes);
+        Assert.Equal(CaptureHarness.FormId, write.FormId);
+        Assert.Null(write.Detail!.FieldCaptions);
+    }
+
+    /// <summary>Stands in for another package's decrypting read hook: it reverses every string it is handed.</summary>
+    private sealed class ReversingFetchHandler : INotificationHandler<RecordFetchingNotification>
+    {
+        public int Calls { get; private set; }
+
+        public void Handle(RecordFetchingNotification notification)
+        {
+            Calls++;
+            foreach (Umbraco.Forms.Core.Persistence.Dtos.RecordField field in notification.Record.RecordFields.Values)
+            {
+                field.Values = field.Values.Select(v => v is string s ? (object)new string(s.Reverse().ToArray()) : v).ToList();
+            }
+        }
     }
 
     [Fact]
@@ -946,6 +1088,59 @@ public sealed class EntryAuditActionFilterTests : IDisposable
         Assert.False(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new OkObjectResult(new object()))));
         Assert.False(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new PhysicalFileResult("/x", "application/octet-stream"))));
         Assert.True(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new EmptyResult())));
+    }
+
+    // merge-fix 12: an authentication or authorisation denial, or any result that states a non-2xx status, is Forms (or
+    // ASP.NET Core) refusing the request. Nothing was served, so it is not a failed audit, never a 503 and never a gap.
+    public static TheoryData<Type, string, bool> DenialCases()
+    {
+        var data = new TheoryData<Type, string, bool>();
+        foreach (Type controller in new[] { typeof(PostGenerateExportController), typeof(ExportController) })
+        {
+            foreach (string denial in new[] { "forbid", "challenge", "unauthorized", "signout", "json401", "content403" })
+            {
+                data.Add(controller, denial, false);
+                data.Add(controller, denial, true);
+            }
+        }
+
+        return data;
+    }
+
+    private static IActionResult Denial(string kind) => kind switch
+    {
+        "forbid" => new ForbidResult(),
+        "challenge" => new ChallengeResult(),
+        "unauthorized" => new UnauthorizedResult(),
+        "signout" => new SignOutResult(),
+        "json401" => new JsonResult(null) { StatusCode = 401 },
+        "content403" => new ContentResult { StatusCode = 403 },
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    [Theory]
+    [MemberData(nameof(DenialCases))]
+    public async Task Filter_ExportDenied_IsNotAnAuditFailure_ResponseUnchanged(Type controller, string denial, bool failClosed) // merge-fix 12
+    {
+        _h.Options.EntryAudit.FailClosedOnExport = failClosed;
+        IActionResult result = Denial(denial);
+
+        ActionExecutedContext executed = await RunExportWith(controller, () => result);
+
+        Assert.Same(result, executed.Result);
+        Assert.Empty(_h.Writes);
+        Assert.Equal(0, _h.Health.WriteFailuresSinceStart);
+        Assert.Null(_h.Health.TakePendingGap());
+    }
+
+    [Fact]
+    public void IsUnrecognisedResult_UnknownTypeThatCouldBeASuccess_StaysUnrecognised() // merge-fix 12
+    {
+        Assert.True(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new ContentResult())));
+        Assert.True(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new ContentResult { StatusCode = 200 })));
+        Assert.True(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new JsonResult(null))));
+        Assert.False(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new ForbidResult())));
+        Assert.False(EntryAuditActionFilter.IsUnrecognisedResult(Executed(new ContentResult { StatusCode = 302 })));
     }
 
     private Task<ActionExecutedContext> RunExportWith(Type controller, Func<IActionResult?> result) =>

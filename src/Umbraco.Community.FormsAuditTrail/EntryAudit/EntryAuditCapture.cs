@@ -10,6 +10,7 @@ using Umbraco.Forms.Core.Data.Storage;
 using Umbraco.Forms.Core.Services;
 using Umbraco.Forms.Web.Api.ManagementApi.Export;
 using Umbraco.Forms.Web.Api.ManagementApi.Record;
+using Umbraco.Forms.Web.Models.Backoffice;
 using FormsConstants = Umbraco.Forms.Core.Constants;
 
 namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
@@ -37,11 +38,18 @@ public sealed class EntryAuditCapture(
     IRecordStorage recordStorage,
     IFormService formService,
     EntryAuditHealth health,
-    ILogger<EntryAuditCapture> logger)
+    ILogger<EntryAuditCapture> logger,
+    DeletedRecordScrubber scrubber)
 {
     private static readonly Guid DeleteRecordSetAction = Guid.Parse(FormsConstants.RecordSetActionTypes.DeleteRecordSet);
 
     private AccessEventType? _kind;
+
+    /// <summary>
+    /// The ids a bulk delete request named (S5: <c>RecordActionExecution.RecordKeys</c>), read before the action runs. Only
+    /// their count is ever stored, as <c>requestedCount</c>; they are never claimed or scrubbed (R63).
+    /// </summary>
+    private IReadOnlyList<Guid> _requestedDeleteIds = [];
 
     /// <summary>
     /// True when <see cref="TryBegin"/> failed for an export or download under <c>FailClosedOnExport</c>: the adapter
@@ -76,6 +84,11 @@ public sealed class EntryAuditCapture(
             // Recorded before any work that can throw, so a failure below still knows whether it must fail closed.
             _kind = kind;
             (formId, Guid? recordId, EntryAuditDetail detail) = EntryAuditRequestReader.Read(request, kind);
+            if (kind == AccessEventType.Deleted)
+            {
+                (detail, _requestedDeleteIds) = ReadDelete(request, detail);
+            }
+
             collector.Open(kind, formId, recordId, detail);
             if (kind == AccessEventType.Edited)
             {
@@ -108,9 +121,26 @@ public sealed class EntryAuditCapture(
     /// </summary>
     public async Task<CaptureOutcome> CompleteAsync(bool success, object? resultValue = null)
     {
-        if (_kind is not { } kind || !success)
+        if (_kind is not { } kind)
         {
             return CaptureOutcome.None;
+        }
+
+        if (!success)
+        {
+            WarnIfEditOutcomeUnknown(kind);
+            if (kind == AccessEventType.Deleted)
+            {
+                RecordPartialDelete();
+            }
+
+            return CaptureOutcome.None;
+        }
+
+        if (kind == AccessEventType.Deleted)
+        {
+            // Erasure must not depend on the audit row, so it runs first and on its own; it never throws.
+            await ScrubDeletedAsync();
         }
 
         try
@@ -186,33 +216,83 @@ public sealed class EntryAuditCapture(
     /// values would be stored next to ciphertext. Copied, because storage may hand back an instance Forms then mutates.
     /// </summary>
     /// <remarks>
-    /// Runs before the action. A failure must not stop the edit (E12): it is logged, counted in health, and the edit is
-    /// still recorded, without values, as <c>beforeUnavailable</c>.
+    /// Runs before the action and never stops the edit (E12). With no before values the edit, if Forms accepts it, is
+    /// still recorded without values as <c>beforeUnavailable</c>; that row is the evidence, so no case here is counted
+    /// as a health failure, which would add an <c>AuditGap</c> for a row that exists (R54). A missing form or record, or
+    /// a record of another form, is expected: Forms answers those requests with 404 itself (spike R54(0)).
     /// </remarks>
     private void CaptureBeforeValues(Guid? formId, Guid? recordId)
     {
         try
         {
+            string? missing = null;
+            Umbraco.Forms.Core.Persistence.Dtos.Record? record = null;
             if (formId is not { } fid || recordId is not { } rid)
             {
-                throw new InvalidOperationException("The edit request names no form or record.");
+                missing = "no form or record id";
+            }
+            else if (formService.Get(fid) is not { } form)
+            {
+                missing = "form not found";
+            }
+            else if ((record = recordStorage.GetRecordByUniqueId(rid, form)) is null)
+            {
+                missing = "record not found";
+            }
+            else if (record.Form != fid)
+            {
+                // R54(2): never diff against another form's entry, whatever storage returns for the pair.
+                missing = "record belongs to another form";
             }
 
-            Umbraco.Forms.Core.Models.Form form = formService.Get(fid) ?? throw new InvalidOperationException("Form not found.");
-            Umbraco.Forms.Core.Persistence.Dtos.Record record = recordStorage.GetRecordByUniqueId(rid, form)
-                ?? throw new InvalidOperationException("Record not found.");
-            collector.SetBeforeValues(RecordValueSnapshot.From(record));
+            if (missing is null)
+            {
+                collector.SetBeforeValues(RecordValueSnapshot.From(record!));
+                return;
+            }
+
+            collector.MarkBeforeUnavailable();
+            SafeLog.Run(() => logger.LogWarning(
+                "FormsAuditTrail has no values before an edit ({Reason}): event {EventType}, form {FormId}, record {RecordId}.",
+                missing,
+                AccessEventType.Edited,
+                formId,
+                recordId));
         }
         catch (Exception ex)
         {
             collector.MarkBeforeUnavailable();
-            RecordFailure(AccessEventType.Edited, formId);
             SafeLog.Run(() => logger.LogError(
                 "FormsAuditTrail could not read an entry's values before an edit ({ExceptionType}): event {EventType}, form {FormId}, user {UserKey}, records 1; the edit is recorded without values.",
                 ex.GetType().Name,
                 AccessEventType.Edited,
                 formId,
                 CurrentUserKeyOrEmpty()));
+        }
+    }
+
+    /// <summary>
+    /// R54(6): Forms reported failure after the handler had already seen the changed values at <c>RecordSaving</c>, so
+    /// the save may or may not have reached the database. Nothing is written, because a row would claim an edit that may
+    /// not exist; the Warning lets an operator check the entry. Ids only, never values.
+    /// </summary>
+    private void WarnIfEditOutcomeUnknown(AccessEventType kind)
+    {
+        try
+        {
+            if (kind == AccessEventType.Edited && collector.Window is { Changes.Count: > 0 } window)
+            {
+                SafeLog.Run(() => logger.LogWarning(
+                    "FormsAuditTrail edit outcome unknown: the request failed after the save was prepared; nothing recorded. Event {EventType}, form {FormId}, record {RecordId}, user {UserKey}.",
+                    kind,
+                    window.FormId,
+                    window.RecordId,
+                    CurrentUserKeyOrEmpty()));
+            }
+        }
+        catch
+        {
+            // Diagnostic only; it must never affect the response.
         }
     }
 
@@ -278,8 +358,6 @@ public sealed class EntryAuditCapture(
             // With no changed field there is nothing to record (E3), unless the before values could not be read: then
             // the edit itself is still evidence and is written without a diff (E12).
             case AccessEventType.Edited when window.Changes.Count == 0 && window.Detail.BeforeUnavailable != true:
-            // Deleted rows and their in-request scrub arrive with Task 14 (S5 fallback).
-            case AccessEventType.Deleted:
                 return null;
         }
 
@@ -343,7 +421,14 @@ public sealed class EntryAuditCapture(
         if (kind == AccessEventType.Created)
         {
             // The response is the S1 source for the new id; the saving notification's record is the fallback.
-            recordId = CreatedRecordId(resultValue) ?? recordId;
+            Guid? responseId = CreatedRecordId(resultValue);
+            if (responseId is { } created && recordId is { } saved && created != saved)
+            {
+                // R54(3): the captions came from a different saved record than the one Forms reports creating.
+                detail = detail with { FieldCaptions = null };
+            }
+
+            recordId = responseId ?? recordId;
         }
 
         IReadOnlyCollection<Guid> recordIds = [];
@@ -385,6 +470,29 @@ public sealed class EntryAuditCapture(
             case AccessEventType.ExportDownloaded:
                 recordCount = 0;
                 break;
+
+            case AccessEventType.Deleted:
+                IReadOnlyList<Guid> deleted = DeletedIds(window);
+                if (deleted.Count == 0)
+                {
+                    // R63: Forms returned 2xx but published no deletion, so nothing is claimed as deleted. The row
+                    // still records the attempt and how many entries it asked for; reconciliation covers a deletion
+                    // that happened without the notification.
+                    recordId = null;
+                    recordCount = 0;
+                    detail = detail with { RecordIdsCaptured = false, RequestedCount = RequestedCount(window) };
+                }
+                else if (window.Detail.Bulk == true)
+                {
+                    // P8: one row per request with the ids as child rows, however many entries went; entry history
+                    // finds it through the child row. If the children fail the writer flags recordIdsCaptured=false.
+                    recordId = null;
+                    recordIds = deleted;
+                    recordCount = deleted.Count;
+                }
+
+                // A single delete Forms confirmed keeps its route id and a count of 1, the defaults above.
+                break;
         }
 
         return new AccessWrite(kind, formId, null, recordId, recordCount, userKey, userName, detail, recordIds, window.Changes.ToArray())
@@ -393,6 +501,105 @@ public sealed class EntryAuditCapture(
             // Every unresolved user shares Guid.Empty, so a dedupe key would hide a second person behind the first.
             SkipDedupe = userUnresolved,
         };
+    }
+
+    /// <summary>
+    /// Shapes a delete's detail and reads the ids a bulk request names. Forms' single-delete route carries the id in the
+    /// route; the Delete record-set action carries them in its body (S5), found by type so a Forms rename breaks the build.
+    /// </summary>
+    private static (EntryAuditDetail Detail, IReadOnlyList<Guid> RequestedIds) ReadDelete(CaptureRequest request, EntryAuditDetail detail)
+    {
+        if (request.ControllerType != typeof(ExecuteActionController))
+        {
+            return (detail with { DeleteKind = "single" }, []);
+        }
+
+        Guid[] ids = request.Arguments.Values.OfType<RecordActionExecution>().FirstOrDefault()?.RecordKeys?.ToArray() ?? [];
+        return (detail with { DeleteKind = "bulk", Bulk = true }, ids);
+    }
+
+    /// <summary>
+    /// The entries this delete request removed: only ids Forms published in <c>RecordDeleting</c> during the request,
+    /// for the request's form (R63). The request's own ids are never trusted, because a key Forms could not find, or one
+    /// from another form, publishes nothing; claiming it would put a false deletion in the log and scrub a live entry's
+    /// edit history. A single delete is its route id, and only when Forms published it.
+    /// </summary>
+    /// <remarks>
+    /// <c>RecordDeletingNotification</c> is cancelable. Our handler notes the ids when it runs; if a handler that runs
+    /// after it cancels the delete and Forms still answers 2xx, these ids are claimed and scrubbed although the entries
+    /// remain. Nothing here can see that cancel. Accepted: it needs a site handler that vetoes deletes, the user had
+    /// Forms' delete permission for these entries, and the loss is their stored edit values, not the entries.
+    /// </remarks>
+    private IReadOnlyList<Guid> DeletedIds(CaptureWindow window)
+    {
+        Guid[] seen = window.DeletedRecords
+            .Where(d => window.FormId is not { } formId || d.FormId == formId)
+            .Select(d => d.RecordId)
+            .Distinct()
+            .ToArray();
+
+        if (window.Detail.Bulk != true)
+        {
+            return window.RecordId is { } single && seen.Contains(single) ? [single] : [];
+        }
+
+        return seen;
+    }
+
+    private int RequestedCount(CaptureWindow window) =>
+        window.Detail.Bulk == true ? _requestedDeleteIds.Distinct().Count() : window.RecordId is null ? 0 : 1;
+
+    /// <summary>
+    /// R63: a delete that failed after Forms began deleting (a bulk action that throws partway) may have removed entries
+    /// with no Deleted row to show it. That is recorded as a failed Deleted event, so the next stored write leaves an
+    /// <c>AuditGap</c> row. Nothing is scrubbed in the request: which entries went is unknown, and reconciliation scrubs
+    /// whatever is really gone.
+    /// </summary>
+    private void RecordPartialDelete()
+    {
+        try
+        {
+            if (collector.Window is not { Kind: AccessEventType.Deleted, DeletedRecords.Count: > 0 } window)
+            {
+                return;
+            }
+
+            health.RecordWriteFailure(AccessEventType.Deleted, window.FormId ?? Guid.Empty);
+            SafeLog.Run(() => logger.LogError(
+                "FormsAuditTrail saw Forms start deleting entries in a request that then failed: event {EventType}, form {FormId}, user {UserKey}, records {RecordCount}; no Deleted row is written and the daily reconciliation will scrub what was removed.",
+                AccessEventType.Deleted,
+                window.FormId,
+                AuditHandlerHelpers.TryGetCurrentUser(securityAccessor, out Guid userKey, out _) ? userKey : Guid.Empty,
+                window.DeletedRecords.Select(d => d.RecordId).Distinct().Count()));
+        }
+        catch
+        {
+            // Health is in-memory; if even that fails there is nowhere left to report it.
+        }
+    }
+
+    /// <summary>
+    /// The in-request erasure scrub (Task 14, both S5 branches): once Forms has returned 2xx its delete scope has
+    /// completed, so the deleted entries' stored edit values can be nulled now rather than by the next reconciliation.
+    /// Limited to the request's form, so ids naming another form's records cannot erase that form's edit history.
+    /// </summary>
+    private async Task ScrubDeletedAsync()
+    {
+        try
+        {
+            if (collector.Window is not { Kind: AccessEventType.Deleted } window)
+            {
+                return;
+            }
+
+            IReadOnlyList<Guid> ids = DeletedIds(window);
+            Guid userKey = AuditHandlerHelpers.TryGetCurrentUser(securityAccessor, out Guid key, out _) ? key : Guid.Empty;
+            await scrubber.ScrubAsync(window.FormId, ids, userKey);
+        }
+        catch (Exception ex)
+        {
+            SafeLog.Run(() => logger.LogError("FormsAuditTrail could not scrub deleted entries' edit values ({ExceptionType}); the daily reconciliation will.", ex.GetType().Name));
+        }
     }
 
     private static bool IsDeleteAction(CaptureRequest request) =>

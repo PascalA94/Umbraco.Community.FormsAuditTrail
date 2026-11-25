@@ -42,8 +42,11 @@ internal sealed class CaptureHarness : IDisposable
     private readonly ServiceProvider _root;
     private readonly HttpContextAccessor _httpAccessor = new();
 
-    public CaptureHarness(bool realWriter = false, bool captureUnavailable = false)
+    private readonly Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] _interceptors;
+
+    public CaptureHarness(bool realWriter = false, bool captureUnavailable = false, params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
+        _interceptors = interceptors;
         Monitor.CurrentValue.Returns(Options);
         SetUser(UserKey, "Editor");
 
@@ -56,6 +59,11 @@ internal sealed class CaptureHarness : IDisposable
         services.AddSingleton(FormService);
         services.AddSingleton(Health);
         services.AddScoped(_ => FieldInfo);
+        // The in-request erasure scrub (Task 14). Without the real writer no audit database is registered, so a scrub
+        // fails exactly as it would on a broken database, which the fail-open tests rely on.
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ILogger<DeletedRecordScrubber>>(ScrubLog);
+        services.AddSingleton<DeletedRecordScrubber>();
         FormService.Get(Arg.Any<Guid>()).Returns(call => new Form { Id = call.Arg<Guid>() });
         RecordStorage.GetRecordByUniqueId(Arg.Any<Guid>(), Arg.Any<Form>()).Returns(_ => StoredRecord);
         FieldInfo.GetFields(Arg.Any<Guid>()).Returns(new Dictionary<Guid, EntryAudit.FieldInfo>());
@@ -72,7 +80,6 @@ internal sealed class CaptureHarness : IDisposable
         if (realWriter)
         {
             services.AddScoped<FormsAuditDbContext>(_ => OpenDb());
-            services.AddSingleton(TimeProvider.System);
             services.AddSingleton<EntryAuditDeduplicator>();
             services.AddSingleton<ILogger<EntryAuditWriter>>(NullLogger<EntryAuditWriter>.Instance);
             services.AddSingleton<IEntryAuditWriter, EntryAuditWriter>();
@@ -95,6 +102,7 @@ internal sealed class CaptureHarness : IDisposable
         SearchHandler = new EntrySearchResultFetchingHandler(accessor, NullLogger<EntrySearchResultFetchingHandler>.Instance);
         RecordHandler = new RecordFetchingHandler(accessor, NullLogger<RecordFetchingHandler>.Instance);
         SavingHandler = new RecordSavingHandler(accessor, _httpAccessor, Monitor, NullLogger<RecordSavingHandler>.Instance);
+        DeletingHandler = new RecordDeletingHandler(accessor, NullLogger<RecordDeletingHandler>.Instance);
     }
 
     public FormsAuditTrailOptions Options { get; } = new();
@@ -109,6 +117,8 @@ internal sealed class CaptureHarness : IDisposable
     public EntrySearchResultFetchingHandler SearchHandler { get; }
     public RecordFetchingHandler RecordHandler { get; }
     public RecordSavingHandler SavingHandler { get; }
+    public RecordDeletingHandler DeletingHandler { get; }
+    public ListLogger<DeletedRecordScrubber> ScrubLog { get; } = new();
 
     /// <summary>Forms' storage, read by the capture before the action for an edit (SEC-04, S2).</summary>
     public IRecordStorage RecordStorage { get; } = Substitute.For<IRecordStorage>();
@@ -117,7 +127,7 @@ internal sealed class CaptureHarness : IDisposable
     public EntryAuditHealth Health { get; } = new(Substitute.For<IAuditStateStore>(), TimeProvider.System);
 
     /// <summary>What the storage read returns: the entry as stored before the edit. Empty unless a test sets it.</summary>
-    public Record StoredRecord { get; set; } = new();
+    public Record StoredRecord { get; set; } = new() { Form = FormId };
 
     /// <summary>The scope of the last request run, kept so a test can inspect the collector after the filter returns.</summary>
     public IServiceScope? LastScope { get; private set; }
@@ -141,7 +151,7 @@ internal sealed class CaptureHarness : IDisposable
     public void ClearUser() => Security.BackOfficeSecurity.Returns((IBackOfficeSecurity?)null);
 
     public SqliteFormsAuditDbContext OpenDb() =>
-        new(new DbContextOptionsBuilder<SqliteFormsAuditDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        new(new DbContextOptionsBuilder<SqliteFormsAuditDbContext>().UseSqlite($"Data Source={_dbPath}").AddInterceptors(_interceptors).Options);
 
     /// <summary>Plays one request through the filter and returns the executed context MVC would hand on.</summary>
     public async Task<ActionExecutedContext> RunAsync(
@@ -240,6 +250,12 @@ internal sealed class CaptureHarness : IDisposable
     /// <summary>What Forms does when it saves a record: an edit and a backoffice create both publish this (spec 7.3).</summary>
     public void SaveRecord(Record record) =>
         SavingHandler.Handle(new RecordSavingNotification(record, new Umbraco.Cms.Core.Events.EventMessages()));
+
+    /// <summary>What Forms does inside its delete scope, once per batch of records it is about to delete (S5).</summary>
+    public void DeleteRecords(Guid formId, params Guid[] ids) =>
+        DeletingHandler.Handle(new RecordDeletingNotification(
+            ids.Select(id => new Record { UniqueId = id, Form = formId }).ToArray(),
+            new Umbraco.Cms.Core.Events.EventMessages()));
 
     public void Dispose()
     {

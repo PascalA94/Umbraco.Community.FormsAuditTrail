@@ -31,6 +31,7 @@ public sealed class EntryAuditWriterTests : IDisposable
     private readonly EntryAuditHealth _health;
     private bool _breakDatabase;
     private bool _failGapSave;
+    private bool _failScrub;
 
     public EntryAuditWriterTests()
     {
@@ -60,7 +61,7 @@ public sealed class EntryAuditWriterTests : IDisposable
             throw new InvalidOperationException("database unavailable");
         }
 
-        return new SqliteFormsAuditDbContext(new DbContextOptionsBuilder<SqliteFormsAuditDbContext>().UseSqlite($"Data Source={_dbPath}").AddInterceptors(new GapSaveFailure(() => _failGapSave)).Options);
+        return new SqliteFormsAuditDbContext(new DbContextOptionsBuilder<SqliteFormsAuditDbContext>().UseSqlite($"Data Source={_dbPath}").AddInterceptors(new GapSaveFailure(() => _failGapSave), new ScrubFailure(() => _failScrub)).Options);
     }
 
     private SqliteFormsAuditDbContext Reader()
@@ -80,6 +81,101 @@ public sealed class EntryAuditWriterTests : IDisposable
         IReadOnlyCollection<Guid>? recordIds = null,
         IReadOnlyList<EntryFieldChange>? changes = null) =>
         new(type, form ?? FormId, formName, record, recordIds?.Count ?? 0, User, userName, detail, recordIds ?? [], changes ?? []);
+
+    private static readonly Guid FieldA = Guid.NewGuid();
+    private static readonly Guid FieldB = Guid.NewGuid();
+
+    private async Task SeedEditAsync(Guid record, Guid field, string oldValue, string newValue, Guid? form = null) =>
+        await Writer.WriteAsync(Write(AccessEventType.Edited, form, record: record, changes: [new EntryFieldChange(field, "Caption", oldValue, newValue, false, false)]) with { SkipDedupe = true });
+
+    private async Task<List<FormEntryChange>> ChangesOfAsync(Guid record, Guid field)
+    {
+        await using SqliteFormsAuditDbContext db = Reader();
+        return await db.EntryChanges.Include(c => c.Access).Where(c => c.Access!.RecordId == record && c.FieldId == field).OrderBy(c => c.Id).ToListAsync();
+    }
+
+    [Fact]
+    public async Task Write_ClearedField_ScrubsEarlierValuesOfThatFieldAndRecordOnly() // @M3-M4-FIX item 13 SEC-03
+    {
+        Guid record = Guid.NewGuid();
+        Guid otherRecord = Guid.NewGuid();
+        await SeedEditAsync(record, FieldA, "a0", "a1");
+        await SeedEditAsync(record, FieldB, "b0", "b1");
+        await SeedEditAsync(otherRecord, FieldA, "x0", "x1");
+
+        await Writer.WriteAsync(Write(AccessEventType.Edited, record: record, changes: [new EntryFieldChange(FieldA, "Caption", null, null, false, true)]) with { SkipDedupe = true });
+
+        List<FormEntryChange> a = await ChangesOfAsync(record, FieldA);
+        Assert.Equal(2, a.Count);
+        Assert.Null(a[0].OldValue);
+        Assert.Null(a[0].NewValue);
+        Assert.NotNull(a[0].ValuesScrubbedAt);
+        Assert.True(a[1].Cleared);
+        Assert.Null(a[1].NewValue);
+
+        FormEntryChange b = Assert.Single(await ChangesOfAsync(record, FieldB));
+        Assert.Equal("b1", b.NewValue);
+        Assert.Null(b.ValuesScrubbedAt);
+        FormEntryChange other = Assert.Single(await ChangesOfAsync(otherRecord, FieldA));
+        Assert.Equal("x1", other.NewValue);
+        Assert.Null(other.ValuesScrubbedAt);
+    }
+
+    [Fact]
+    public async Task Write_ClearedFieldScrubFails_FlagsTheParentRowAndStillWrites() // @M4-FIX R73 item 2
+    {
+        Guid record = Guid.NewGuid();
+        await SeedEditAsync(record, FieldA, "a0", "a1");
+        _failScrub = true;
+
+        AccessWriteResult result = await Writer.WriteAsync(Write(AccessEventType.Edited, record: record, changes: [new EntryFieldChange(FieldA, "Caption", null, null, false, true)]) with { SkipDedupe = true });
+        _failScrub = false;
+
+        Assert.Equal(AccessWriteStatus.Written, result.Status);
+        await using SqliteFormsAuditDbContext db = Reader();
+        FormAccessEntry parent = await db.AccessEntries.SingleAsync(a => a.Id == result.AccessId);
+        Assert.Contains("\"valuesScrubIncomplete\":true", parent.Detail);
+        Assert.Equal("a1", (await ChangesOfAsync(record, FieldA))[0].NewValue);
+    }
+
+    [Fact]
+    public async Task Write_MultiValueBlank_ClearsEarlierRows() // @M4-FIX R73 item 3
+    {
+        Guid record = Guid.NewGuid();
+        await SeedEditAsync(record, FieldA, "[\"x\",\"y\"]", "[\"x\",\"y\",\"z\"]");
+
+        // Every value of a multi-value field blanked: the differ reports one Cleared change for the field.
+        await Writer.WriteAsync(Write(AccessEventType.Edited, record: record, changes: [new EntryFieldChange(FieldA, "Caption", null, null, false, true)]) with { SkipDedupe = true });
+
+        Assert.Null((await ChangesOfAsync(record, FieldA))[0].NewValue);
+    }
+
+    [Fact]
+    public async Task Write_ClearedFieldWithNoValuesStored_ModeNone_IsHarmless() // @M4-FIX R73 item 3
+    {
+        _options.EntryAudit.StoreEditValues = StoreEditValuesMode.None;
+        Guid record = Guid.NewGuid();
+        await Writer.WriteAsync(Write(AccessEventType.Edited, record: record, changes: [new EntryFieldChange(FieldA, "Caption", null, null, false, false)]) with { SkipDedupe = true });
+
+        AccessWriteResult result = await Writer.WriteAsync(Write(AccessEventType.Edited, record: record, changes: [new EntryFieldChange(FieldA, "Caption", null, null, false, true)]) with { SkipDedupe = true });
+
+        Assert.Equal(AccessWriteStatus.Written, result.Status);
+        Assert.Equal(2, (await ChangesOfAsync(record, FieldA)).Count);
+    }
+
+    [Fact]
+    public async Task Write_ClearedField_KeepClearedValues_LeavesHistoryAlone() // @M3-M4-FIX item 13
+    {
+        _options.EntryAudit.KeepClearedValues = true;
+        Guid record = Guid.NewGuid();
+        await SeedEditAsync(record, FieldA, "a0", "a1");
+
+        await Writer.WriteAsync(Write(AccessEventType.Edited, record: record, changes: [new EntryFieldChange(FieldA, "Caption", "a1", null, false, true)]) with { SkipDedupe = true });
+
+        List<FormEntryChange> a = await ChangesOfAsync(record, FieldA);
+        Assert.Equal("a1", a[0].NewValue);
+        Assert.Null(a[0].ValuesScrubbedAt);
+    }
 
     [Fact]
     public async Task Write_ListViewed_StoresRowWithoutChildIdsByDefault() // @M2-T11
@@ -376,6 +472,23 @@ public sealed class EntryAuditWriterTests : IDisposable
         _provider.Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         File.Delete(_dbPath);
+    }
+
+    private sealed class ScrubFailure(Func<bool> active) : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> NonQueryExecutingAsync(
+            System.Data.Common.DbCommand command,
+            Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (active() && command.CommandText.Contains("UPDATE \"formsAuditTrailEntryChanges\"", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("scrub failed");
+            }
+
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 
     private sealed class GapSaveFailure(Func<bool> active) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor

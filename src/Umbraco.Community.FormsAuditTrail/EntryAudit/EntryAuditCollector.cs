@@ -14,6 +14,7 @@ public sealed class EntryAuditCollector
 {
     private readonly object _gate = new();
     private readonly HashSet<Guid> _seenRecordIds = [];
+    private readonly Dictionary<Guid, int> _deletedRecordCounts = [];
 
     internal CaptureWindow? Window { get; private set; }
 
@@ -109,6 +110,31 @@ public sealed class EntryAuditCollector
             window.FormId ??= formId;
             window.RecordId = recordId;
             window.Detail = window.Detail with { FieldCaptions = fieldCaptions };
+        }
+    }
+
+    /// <summary>
+    /// Counts the records Forms deleted in this request, per form, with or without a window: the deliberate exception to
+    /// the no-op rule above. A permanent form delete is not an audited controller, so it never opens a window, yet its
+    /// <c>Deleted</c> row needs the count (Task 14). Only a number is held, never ids or values, and only for the request.
+    /// </summary>
+    /// <remarks>
+    /// A plain sum: Forms' Delete record-set action publishes <c>RecordDeleting</c> twice per record (S5), but that path
+    /// takes its ids from the window, and the form-delete path publishes once per batch.
+    /// </remarks>
+    internal void CountDeletedRecords(Guid formId, int count)
+    {
+        lock (_gate)
+        {
+            _deletedRecordCounts[formId] = _deletedRecordCounts.GetValueOrDefault(formId) + count;
+        }
+    }
+
+    internal int DeletedRecordCount(Guid formId)
+    {
+        lock (_gate)
+        {
+            return _deletedRecordCounts.GetValueOrDefault(formId);
         }
     }
 

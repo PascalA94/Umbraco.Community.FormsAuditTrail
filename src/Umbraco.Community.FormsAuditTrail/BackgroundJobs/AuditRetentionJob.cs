@@ -134,6 +134,20 @@ public class AuditRetentionJob : IRecurringBackgroundJob
             return scrubbed;
         });
 
+        // Finishes a cleared-field scrub the writer could not complete (SEC-03). Skipped when the operator keeps cleared values.
+        await RunStepAsync(steps, "clearedValueSweep", options.EntryAudit.KeepClearedValues ? 0 : 1, async (scope, now) =>
+        {
+            var swept = await ScrubEarlierValuesOfClearedFieldsAsync(Db(scope), now);
+            if (swept > 0)
+            {
+                _logger.LogInformation(
+                    "Forms Audit Trail sweep: removed the stored values from {Count} earlier edits of fields that were later cleared.",
+                    swept);
+            }
+
+            return swept;
+        });
+
         await WriteLastRunAsync(new JobRunState(started, _time.GetUtcNow().UtcDateTime, steps));
     }
 
@@ -224,6 +238,34 @@ public class AuditRetentionJob : IRecurringBackgroundJob
         return total;
     }
 
+    // Set-based and idempotent: any change row that still holds a value although a later change of the same record and
+    // field was a clear. Rows with nothing stored are not touched, so a second run affects nothing. Batched by change
+    // id like the other steps so a backlog is never one statement or one transaction (P8); a scrubbed row stops
+    // matching, so each pass sees the next unscrubbed batch and the loop ends on the first short one.
+    internal static async Task<int> ScrubEarlierValuesOfClearedFieldsAsync(FormsAuditDbContext db, DateTime nowUtc, int batchSize = 5000)
+    {
+        var total = 0;
+        int affected;
+        do
+        {
+            affected = await db.EntryChanges
+                .Where(c => c.ValuesScrubbedAt == null
+                    && (c.OldValue != null || c.NewValue != null)
+                    && c.Access!.RecordId != null
+                    && db.EntryChanges.Any(n => n.Cleared && n.Id > c.Id && n.FieldId == c.FieldId && n.Access!.RecordId == c.Access!.RecordId))
+                .OrderBy(c => c.Id)
+                .Take(batchSize)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.OldValue, (string?)null)
+                    .SetProperty(c => c.NewValue, (string?)null)
+                    .SetProperty(c => c.ValuesScrubbedAt, (DateTime?)nowUtc));
+            total += affected;
+        }
+        while (affected >= batchSize);
+
+        return total;
+    }
+
     // Pages through the unscrubbed edits by change id and asks Forms about each page's record ids, keeping only the
     // missing ones, so memory is bounded by one page plus the erased ids however many unscrubbed edits exist (an
     // EditValueRetentionDays of 0, values kept forever, would otherwise make that unbounded). Nothing is scrubbed
@@ -234,10 +276,13 @@ public class AuditRetentionJob : IRecurringBackgroundJob
         IFormsRecordReader reader,
         DateTime nowUtc,
         int batchSize = 500,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Guid? formId = null)
     {
+        // formId narrows the pass to one form, for a permanent form delete (R63): only that form's edits are candidates
+        // and only they can be scrubbed, but every other safeguard, the probe included, is the same.
         IQueryable<FormEntryChange> unscrubbed = db.EntryChanges
-            .Where(c => c.ValuesScrubbedAt == null && c.Access!.RecordId != null);
+            .Where(c => c.ValuesScrubbedAt == null && c.Access!.RecordId != null && (formId == null || c.Access!.FormId == formId));
 
         var missing = new HashSet<Guid>();
         long lastId = 0;
@@ -277,7 +322,7 @@ public class AuditRetentionJob : IRecurringBackgroundJob
             throw new ImplausibleReconciliationException(missing.Count);
         }
 
-        return await ErasureScrubber.ScrubRecordsAsync(db, missing.ToArray(), nowUtc, ct);
+        return await ErasureScrubber.ScrubRecordsAsync(db, missing.ToArray(), nowUtc, ct, formId);
     }
 }
 

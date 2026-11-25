@@ -28,6 +28,11 @@ Branch `fc/m1-schema`. Pascal asked (2026-11-24) to keep building past M1 withou
 - Task 10: `Security/ViewThrottle.cs` into `EntryAudit/EntryAuditDeduplicator.cs` (bounded cache, fail towards writing).
 - Task 11: `Recorder/RecorderWriter.cs` (never-blocks write path). `Identity/ActorRef.cs` and `UserIdentityResolver.cs` not adapted here: the caller resolves the user (Task 12).
 - Task 12: `Identity/UserIdentityResolver.cs` into `NotificationHandlers/AuditHandlerHelpers.cs` `TryGetCurrentUser` (a found user keeps its own name, a missing one never borrows another identity). `Identity/ActorRef.cs` read, not needed: only the current user is resolved here.
+- Tasks 13, 13b, 14 and 16a: none.
+- Task 15: `Security/UserActivityAuthorizationHandler.cs` and `Security/UserActivityPolicy.cs` into `Authorization/AccessLogAuthorizationHandler.cs` and `Authorization/AccessLogRequirement.cs` (which holds `AccessLogPolicy`) (group-list requirement, handler never Scoped per spike S6). Patterns, rewritten for this package's requirement and options.
+- Task 16: `Security/ViewLogger.cs` into `Controllers/FormsAuditAccessApiController.cs` (`AuditSearched` and `AuditViewed` writes: log the read, skip repeats in the window, never fail the read). `Security/ViewThrottle.cs` was already adapted in Task 10; nothing new copied from it.
+- Tasks 17 and 17b: none (no UserActivity file copied; Task 17 took only the GUID regex idea, written fresh).
+- Task 16b: `Export/CsvWriter.cs` (formula guard and UTF-8 BOM) and `Export/ExportGate.cs` (row cap) into `Services/AccessCsvWriter.cs`, with `Services/CsvFormatter.cs` extended for SEC-L1. The streaming is new: UserActivity builds its file in memory. Patterns adapted, no verbatim copy.
 
 ## Paused here (2026-11-16)
 

@@ -62,6 +62,8 @@ public sealed class EntryAuditWriter(
             await db.SaveChangesAsync(CancellationToken.None);
             long accessId = entry.Id;
 
+            await ScrubEarlierValuesOfClearedFieldsAsync(db, write, accessId, detail);
+
             bool recordIdsCaptured = await WriteChildrenAsync(db, accessId, write, detail);
 
             // M7 publishes its access-recorded notification here, after the parent row is saved (spec 7.1).
@@ -91,6 +93,57 @@ public sealed class EntryAuditWriter(
                 write.RecordCount,
                 ex.GetType().Name));
             return new AccessWriteResult(AccessWriteStatus.Failed, null, false);
+        }
+    }
+
+    /// <summary>
+    /// SEC-03: blanking a field must not leave the value it held in the earlier edit rows of the same record, where the
+    /// old value was stored as that edit's new value. One set-based statement for all cleared fields of the write. A
+    /// failure does not fail the write (the Cleared row is already saved) but is counted so the gap is reported.
+    /// </summary>
+    private async Task ScrubEarlierValuesOfClearedFieldsAsync(FormsAuditDbContext db, AccessWrite write, long accessId, EntryAuditDetail? detail)
+    {
+        if (write.EventType != AccessEventType.Edited || write.RecordId is not { } recordId || options.CurrentValue.EntryAudit.KeepClearedValues)
+        {
+            return;
+        }
+
+        Guid[] fieldIds = write.Changes.Where(c => c.Cleared).Select(c => c.FieldId).Distinct().ToArray();
+        if (fieldIds.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            DateTime nowUtc = time.GetUtcNow().UtcDateTime;
+            await db.EntryChanges
+                .Where(c => c.ValuesScrubbedAt == null
+                    && c.Access!.Id != accessId
+                    && c.Access!.RecordId == recordId
+                    && fieldIds.Contains(c.FieldId))
+                .ExecuteUpdateAsync(
+                    s => s.SetProperty(c => c.OldValue, (string?)null)
+                        .SetProperty(c => c.NewValue, (string?)null)
+                        .SetProperty(c => c.ValuesScrubbedAt, (DateTime?)nowUtc),
+                    CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            health.RecordWriteFailure(write.EventType, write.FormId);
+            SafeLog.Run(() => logger.LogError(
+                "FormsAuditTrail stored access {AccessId} but could not scrub the earlier values of a cleared field: user {UserKey}, form {FormId} ({ExceptionType}).",
+                accessId, write.UserKey, write.FormId, ex.GetType().Name));
+            // The retention job's sweep finishes the scrub; the flag tells a reader the values may linger until then.
+            try
+            {
+                string flagged = ((detail ?? new EntryAuditDetail()) with { ValuesScrubIncomplete = true }).ToJson(EntryAuditDetail.DefaultMaxBytes);
+                await db.AccessEntries.Where(a => a.Id == accessId).ExecuteUpdateAsync(s => s.SetProperty(a => a.Detail, flagged), CancellationToken.None);
+            }
+            catch (Exception flagEx)
+            {
+                SafeLog.Run(() => logger.LogError("FormsAuditTrail could not flag access {AccessId} as having an incomplete scrub ({ExceptionType}).", accessId, flagEx.GetType().Name));
+            }
         }
     }
 
@@ -314,6 +367,16 @@ public sealed class EntryAuditWriter(
         }
     }
 
+    /// <summary>
+    /// Only a retried configuration change may carry an earlier time (it evidences an off period that the outage delayed
+    /// writing). Every other event is stamped when it is stored, and no caller can post-date a row.
+    /// </summary>
+    private DateTime ResolveTimestamp(AccessWrite write)
+    {
+        DateTime now = time.GetUtcNow().UtcDateTime;
+        return write is { EventType: AccessEventType.ConfigChanged, OccurredUtc: { } occurred } && occurred < now ? occurred : now;
+    }
+
     private FormAccessEntry ToEntry(AccessWrite write, IFormService forms, out EntryAuditDetail? finalDetail)
     {
         var lengths = new Dictionary<string, int>(write.Detail?.OriginalLengths ?? new Dictionary<string, int>(), StringComparer.Ordinal);
@@ -323,7 +386,7 @@ public sealed class EntryAuditWriter(
 
         var entry = new FormAccessEntry
         {
-            Timestamp = time.GetUtcNow().UtcDateTime,
+            Timestamp = ResolveTimestamp(write),
             EventType = (int)write.EventType,
             FormId = write.FormId,
             FormName = formName,

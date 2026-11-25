@@ -256,6 +256,7 @@ Backoffice activity only.
 - Given a user generates an export, when it returns 2xx, then one `Exported` row is written with user, form, export type, filter summary, file name and row count, plus a child row per exported record id.
 - Given the child rows cannot be written (timeout, size), then the `Exported` row still exists, with `Detail.recordIdsCaptured = false` (SEC-02). The parent row is written first, in its own save.
 - Given `FailClosedOnExport` is true and the `Exported` or `ExportDownloaded` row cannot be written, then Forms' response is replaced by 503 and no file name or file is returned. Default false (SEC-02).
+- Given `FailClosedOnExport` is true and the `AuditExported` row of an access-log CSV export cannot be written, then the export returns 503 before any byte is sent. The option covers the access-log CSV as well as Forms' exports and downloads. Default false (SEC-02).
 - Given an exporter that does not read through `IFormRecordSearcher` (for example the "uploaded files" exporter), then the `Exported` row is still written, with record ids missing and `Detail.recordIdsCaptured = false`. (architect's call)
   - This gap is accepted. The scope rejected wrapping each exporter because it is invasive and would still miss third-party exporters. No second capture path in MVP.
   - The UI says so. On that row, the Entry column shows "N entries (ids not captured)". Entry history adds a note: "Exports from some exporters don't record which entries they contained. See the Entry access log for all exports of this form."
@@ -297,7 +298,7 @@ Backoffice activity only.
 - Given a client aborts the request, then the write still runs: the writer never takes `HttpContext.RequestAborted` (SEC-02).
 - Given a form name, user name or field caption longer than its column, then the value is truncated to fit and the row is written. `Detail` is capped at 8 KB with `truncated: true` (SEC-02).
 - Given the form id cannot be resolved, then the row is still written, with `FormId = Guid.Empty` and `Detail.formUnresolved = true`, visible only to users who can access every form (SEC-02, SEC-L3).
-- The only exception is the opt-in `FailClosedOnExport` (E5).
+- The only exception is the opt-in `FailClosedOnExport` (E5), which returns 503 for a Forms export or download, and for an access-log CSV export, whose row cannot be written.
 
 **E13. Uploaded file opened** (SEC-01)
 - Given a backoffice user opens a file uploaded with an entry, when Forms' upload middleware serves it with 2xx, then one `FileViewed` row is written with user, form and a hash of the file path (deduplicated).
@@ -416,7 +417,7 @@ flowchart LR
      - Save the **parent** access row on its own first (`SaveChangesAsync`). Then insert child record ids in batches of 1,000 with change tracking off (`ChangeTracker.AutoDetectChangesEnabled = false`, `ChangeTracker.Clear()` after each batch). Edit changes are few and go with the parent.
      - If a child batch fails, update the parent's `Detail.recordIdsCaptured = false` and record the failure in health. The parent is never lost because its children failed.
      - Always `CancellationToken.None`. Never `HttpContext.RequestAborted`: a client that aborts must not cancel the evidence.
-     - The writer catches its own exceptions and returns a result (`Written`, `Deduplicated`, `Failed`). The filter decides what a failure means: log and carry on (E12), or 503 under `FailClosedOnExport` for `Exported` and `ExportDownloaded` (E5).
+     - The writer catches its own exceptions and returns a result (`Written`, `Deduplicated`, `Failed`). The filter decides what a failure means: log and carry on (E12), or 503 under `FailClosedOnExport` for `Exported` and `ExportDownloaded` (E5). The access-log CSV export applies the same option to its own `AuditExported` row, before any byte is sent (R56).
      - On `Failed`, record it in `EntryAuditHealth` and log at Error with `userKey`, event type, form id and record count. On the next `Written`, if failures happened since the last success, add one `AuditGap` row (E12).
      - When `EmitLogEvents` is true, after each `Written`, emit one structured log event (`FormsAuditTrail.Access`) with the row's id, time, event, form id, user key and record count. No values, no `Detail`; record ids only when `EmitLogEventRecordIds` is true (SEC-08).
    - **Fail-closed hook:** an action filter can still replace `ActionExecutedContext.Result` after `next()`, so the 503 needs no second filter. If S3 moves the write to `IAsyncResultFilter`, fail-closed moves with it and runs before the result executes.
@@ -630,7 +631,8 @@ The rule for any type S11 or a later Forms version adds: an endpoint that return
   - In the filter's `OnActionExecutionAsync`, **before** `await next()`, for an `UpdateRecordController` match: load the record through `IRecordStorage` (the read path Forms itself uses, so any `RecordFetchingNotification` / decrypting hook runs) and **copy** its field values into the capture window as a plain dictionary. Copy, because storage may return the same instance that Forms then mutates.
   - This was the S2 NO-GO fallback in the first draft. It is now the only path, and the ambient-scope raw read is dropped.
   - Cost: one extra record read per backoffice edit, not per list or submission.
-  - If that read fails, the Forms action still runs (E12), the failure goes to health, and the `Edited` row is written with no changes and `beforeUnavailable: true`, so the edit itself is never lost.
+  - If that read fails, the Forms action still runs (E12) and the `Edited` row is written with no changes and `beforeUnavailable: true`, so the edit itself is never lost. That row is the evidence, so the failure is logged at Error but not counted in health, which would add an `AuditGap` for a row that exists. A missing form or record, or a record that belongs to another form, is logged at Warning only: Forms answers those requests with 404 itself (R54).
+  - Two people editing the same entry at the same time can produce a before value that the other person had already changed, because each request reads the stored values before its own save and Forms itself lets the last save win.
 - Handler steps:
   1. Return if no `Edited` (or `Created`) capture window is open.
   2. Return if `record.Id <= 0` and the window is `Edited` (insert path: submissions also publish `RecordSaving`).
@@ -677,7 +679,7 @@ The rule for any type S11 or a later Forms version adds: an endpoint that return
 - A backoffice request where no user resolves is recorded as `UserName = "Unknown"`, `UserKey = Guid.Empty`, `Detail.userUnresolved = true`, never as "System" (SEC-L5). "System" is kept for jobs and config changes, which have no request.
 - `UserName` is copied at write time. The owner can rename themselves, so the stored name is presentation only; `UserKey` is the evidence. The CSV carries `UserKey`, and the dashboard shows the current name beside the stored one when they differ (SEC-L2).
 
-### 7.4 Jobs: retention, value expiry, reconciliation
+### 7.4 Jobs: retention, value expiry, reconciliation, cleared-value sweep
 
 Extend the existing daily `AuditRetentionJob` rather than adding a second job. Same period, delay and server roles. Each step is independent, wrapped in its own try/catch. (architect's call)
 
@@ -687,9 +689,10 @@ Extend the existing daily `AuditRetentionJob` rather than adding a second job. S
 4. **Reconciliation scrub:** for edit-change rows that still hold values (at most 90 days' worth), find record ids that no longer exist in `UFRecords` and scrub them. Read `UFRecords` through Umbraco's scope (`IScopeProvider.CreateScope(autoComplete: true)`), in batches of 500 ids. (architect's call: catches deletes that published no notification)
    - This read selects `UniqueId` only, never `RecordData`, so it does not bypass at-rest encryption (SEC-04).
    - **A failed read is a failed step (SEC-I1).** If the reader throws or returns an error for any batch, stop the step, scrub nothing from that run, log at Error and record the step as failed. Never treat "could not read" as "all records missing" (which would scrub live data) or "none missing" (which would silently skip erasure).
+5. **Cleared-value sweep (`clearedValueSweep`):** unless `KeepClearedValues` is true, null `OldValue`/`NewValue` and set `ValuesScrubbedAt` on every change row that still holds a value although a later change of the same record and field was a clear (SEC-03). It finishes a cleared-field scrub the writer could not complete, and it is retroactive: switching `KeepClearedValues` from true to false sweeps the earlier values kept under the old setting. The clearing row's own old value, kept while the setting was on, is left to value expiry or erasure. Idempotent: a second run affects nothing.
 - Log counts at Information when anything changed. Log at **Warning** when step 2 deletes more than 1,000 access rows in one run (SEC-07).
 - Steps 2 and 3 run in set-based batches of 5,000 rows, looping until a batch affects fewer, so millions of rows never become one statement (plan review P8). Reconciliation reads in batches of 500 ids.
-- At the end of the run, write `job.lastRun` to `formsAuditTrailState` with start, end and each step's outcome. The health signal on every server reads it, so a load-balanced site with no healthy scheduling publisher shows "erasure scrub has not run in 48 hours" (SEC-I1, E18).
+- At the end of the run, write `job.lastRun` to `formsAuditTrailState` with start, end and each step's outcome, keyed by step name: `definitionRetention`, `accessRetention`, `valueExpiry`, `reconciliation`, `clearedValueSweep`. The health signal on every server reads it, so a load-balanced site with no healthy scheduling publisher shows "erasure scrub has not run in 48 hours" (SEC-I1, E18).
 
 ### 7.5 API and permissions
 
