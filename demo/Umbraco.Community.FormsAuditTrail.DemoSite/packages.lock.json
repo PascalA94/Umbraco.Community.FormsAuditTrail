@@ -1896,7 +1896,7 @@
       "umbraco.community.formsaudittrail": {
         "type": "Project",
         "dependencies": {
-          "MessagePack": "[3.1.11, 4.0.0)",
+          "MessagePack": "[3.1.11, )",
           "System.Security.Cryptography.Pkcs": "[10.0.13, 11.0.0)",
           "Umbraco.Cms.Persistence.EFCore.SqlServer": "[18.3.0, 19.0.0)",
           "Umbraco.Cms.Persistence.EFCore.Sqlite": "[18.3.0, 19.0.0)",
