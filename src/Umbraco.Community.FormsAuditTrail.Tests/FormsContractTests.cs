@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Web.Common.ApplicationBuilder;
+using Umbraco.Community.FormsAuditTrail.EntryAudit;
 using Umbraco.Forms.Core.Models;
 using Umbraco.Forms.Core.Searchers;
 using Umbraco.Forms.Core.Services.Notifications;
@@ -97,6 +98,23 @@ public class FormsContractTests
         Assert.True(flag.CanRead && flag.CanWrite);
     }
 
+    [Theory]
+    [InlineData(typeof(ExportController), nameof(ExportController.GetExport), typeof(PhysicalFileResult))]
+    [InlineData(typeof(PostGenerateExportController), nameof(PostGenerateExportController.PostGenerateExport), typeof(PostGenerateExportController.GenerateExportResponseModel))]
+    public void ExportActions_DeclareTheSuccessResultTheFilterRecognises_ForFormsContract(Type controller, string action, Type declared) // @M2-FIX B10 S1
+    {
+        // S1: the download returns a PhysicalFileResult and the export an OkObjectResult holding the response model.
+        // The filter treats any other result type for these two as a failed audit (503 under FailClosedOnExport), so
+        // a Forms release that changes them must fail here first.
+        var method = controller.GetMethod(action);
+        Assert.NotNull(method);
+        var ok = method!.GetCustomAttributes(typeof(ProducesResponseTypeAttribute), false)
+            .Cast<ProducesResponseTypeAttribute>()
+            .SingleOrDefault(a => a.StatusCode == StatusCodes.Status200OK);
+        Assert.NotNull(ok);
+        Assert.Equal(declared, ok!.Type);
+    }
+
     [Fact]
     public void ProtectFormUploadRequestsMiddleware_NamespaceAndAnchor_ForFormsContract()
     {
@@ -117,5 +135,14 @@ public class FormsContractTests
         var filter = options.PipelineFilters.SingleOrDefault(f => f.Name == "ProtectFormUploadRequestsMiddleware");
         var pipelineFilter = Assert.IsType<UmbracoPipelineFilter>(filter);
         Assert.NotNull(pipelineFilter.PrePipeline);
+
+        // Anchor position (Task 6 deferred minor): the package's filter sits immediately before Forms' filter, so a
+        // Forms 403 is observed. Applied to Forms' real registrations, not a stand-in list.
+        UploadAuditPipeline.Insert(options);
+        var names = options.PipelineFilters.Select(f => f.Name).ToList();
+        int formsIndex = names.IndexOf("ProtectFormUploadRequestsMiddleware");
+        Assert.True(formsIndex > 0);
+        Assert.Equal(UploadAuditPipeline.FilterName, names[formsIndex - 1]);
+        Assert.Equal(UploadAuditPipeline.FormsFilterName, names[formsIndex]);
     }
 }

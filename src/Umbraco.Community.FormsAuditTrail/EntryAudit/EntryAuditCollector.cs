@@ -39,6 +39,19 @@ public sealed class EntryAuditCollector
         }
     }
 
+    /// <summary>The before read failed: the edit is still written, flagged, with no changes (E12).</summary>
+    internal void MarkBeforeUnavailable()
+    {
+        lock (_gate)
+        {
+            if (Window is { } window)
+            {
+                window.BeforeValues = null;
+                window.Detail = window.Detail with { BeforeUnavailable = true };
+            }
+        }
+    }
+
     internal void AddFetchedRecord(Guid recordId)
     {
         lock (_gate)

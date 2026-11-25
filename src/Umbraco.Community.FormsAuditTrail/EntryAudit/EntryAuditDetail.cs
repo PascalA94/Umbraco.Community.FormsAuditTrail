@@ -55,6 +55,7 @@ public sealed record EntryAuditDetail
     public string? DeleteKind { get; init; }
     public bool? FormUnresolved { get; init; }
     public bool? UserUnresolved { get; init; }
+    public bool? SessionExpired { get; init; }
     public bool? Truncated { get; init; }
     public IReadOnlyDictionary<string, int>? OriginalLengths { get; init; }
     public Guid? WorkflowId { get; init; }
@@ -67,7 +68,7 @@ public sealed record EntryAuditDetail
     public bool? BeforeUnavailable { get; init; }
 
     /// <summary>
-    /// Applies the privacy rules before anything is stored or hashed: a search term is kept only when
+    /// Applies the privacy rules before anything is stored: a search term is kept only when
     /// <paramref name="captureSearchTerms"/> is on (otherwise the fact of a search is kept), a file name is capped, and
     /// a member identifier is kept only when it is a key (E16), since a GUID or integer cannot be an email address.
     /// </summary>
@@ -83,7 +84,7 @@ public sealed record EntryAuditDetail
 
         if (raw.FileName is { Length: > FileNameMaxLength } fileName)
         {
-            shaped = shaped with { FileName = fileName[..FileNameMaxLength] };
+            shaped = shaped with { FileName = TextTruncation.Truncate(fileName, FileNameMaxLength) };
         }
 
         if (raw.MemberKey is { } memberKey && !IsKey(memberKey))
@@ -134,7 +135,11 @@ public sealed record EntryAuditDetail
         return Serialize(new EntryAuditDetail { Truncated = true });
     }
 
-    /// <summary>SHA-256 (lower-case hex) over the shaped filter JSON and the paging, the dedupe key's filter part.</summary>
+    /// <summary>
+    /// SHA-256 (lower-case hex) over this detail's filter JSON and paging, the dedupe key's filter part. It hashes
+    /// whatever detail it is called on: the capture core calls it on the raw, unshaped detail so two different searches
+    /// stay apart when terms are not stored (R33), and uses the result for dedupe only. The hash is never stored.
+    /// </summary>
     public string FilterHash()
     {
         string filterJson = Filter is null ? string.Empty : JsonSerializer.Serialize(Filter, JsonOptions);

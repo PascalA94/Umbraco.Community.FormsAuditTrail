@@ -34,7 +34,7 @@ public sealed class EntryAuditDeduplicator(IOptionsMonitor<FormsAuditTrailOption
         }
 
         var window = TimeSpan.FromSeconds(seconds);
-        string key = $"{(int)type}|{userKey:N}|{formId:N}|{recordId:N}|{filterHash}";
+        string key = Key(type, userKey, formId, recordId, filterHash);
         DateTimeOffset now = time.GetUtcNow();
 
         lock (_gate)
@@ -52,6 +52,21 @@ public sealed class EntryAuditDeduplicator(IOptionsMonitor<FormsAuditTrailOption
             return true;
         }
     }
+
+    /// <summary>
+    /// Forgets an event whose write failed (R33), so the next identical view is written instead of being suppressed for
+    /// the rest of the window by a row that never reached the database.
+    /// </summary>
+    public void Release(AccessEventType type, Guid userKey, Guid formId, Guid? recordId, string filterHash)
+    {
+        lock (_gate)
+        {
+            _cache.Remove(Key(type, userKey, formId, recordId, filterHash));
+        }
+    }
+
+    private static string Key(AccessEventType type, Guid userKey, Guid formId, Guid? recordId, string filterHash) =>
+        $"{(int)type}|{userKey:N}|{formId:N}|{recordId:N}|{filterHash}";
 
     public void Dispose() => _cache.Dispose();
 

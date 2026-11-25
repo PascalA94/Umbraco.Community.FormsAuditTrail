@@ -38,7 +38,7 @@ public class FormDeletedHandler : INotificationAsyncHandler<FormDeletedNotificat
                 var hasUserKey = notification.State.TryGetValue($"{FormDeletingHandler.UserKeyStateKeyPrefix}{form.Id}", out var k);
                 var hasUserName = notification.State.TryGetValue($"{FormDeletingHandler.UserNameStateKeyPrefix}{form.Id}", out var n);
                 var userKey = k is Guid g ? g : Guid.Empty;
-                var userName = n as string ?? "System";
+                var userName = n as string ?? AuditUserNames.System;
                 if (!hasUserKey || !hasUserName)
                 {
                     _logger.LogDebug("No captured user for deleted form {FormId}; recording as System", form.Id);

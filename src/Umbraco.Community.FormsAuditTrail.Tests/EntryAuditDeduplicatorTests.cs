@@ -122,9 +122,11 @@ public class EntryAuditDeduplicatorTests
             Assert.True(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "k" + i));
         }
 
-        // The cache is at its limit, so this key is not stored: it writes every time instead of being skipped.
+        // The cache is at its limit, so this key is not stored: the first view is written, and the identical view
+        // straight after is written too, which it would not be had the first been stored (@M2-FIX A7). Only one repeat
+        // is asserted: the cache compacts in the background once over its limit, after which a later one may be stored.
         Assert.True(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "overflow"));
-        Assert.True(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "overflow"));
+        Assert.True(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "overflow"), "An identical event after the cap must still be written.");
     }
 
     [Fact]
@@ -151,5 +153,27 @@ public class EntryAuditDeduplicatorTests
         options.EntryAudit.DeduplicateSeconds = 0;
 
         Assert.True(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "h"));
+    }
+
+    [Fact]
+    public void Release_AfterShouldWrite_AllowsTheNextIdenticalEvent() // R33(2)
+    {
+        using EntryAuditDeduplicator dedupe = Create();
+
+        Assert.True(dedupe.ShouldWrite(AccessEventType.DetailViewed, User, Form, Guid.Empty, "h"));
+        dedupe.Release(AccessEventType.DetailViewed, User, Form, Guid.Empty, "h");
+
+        Assert.True(dedupe.ShouldWrite(AccessEventType.DetailViewed, User, Form, Guid.Empty, "h"));
+    }
+
+    [Fact]
+    public void Release_OtherKey_LeavesTheEntryInPlace()
+    {
+        using EntryAuditDeduplicator dedupe = Create();
+
+        Assert.True(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "h"));
+        dedupe.Release(AccessEventType.ListViewed, User, Form, null, "other");
+
+        Assert.False(dedupe.ShouldWrite(AccessEventType.ListViewed, User, Form, null, "h"));
     }
 }
