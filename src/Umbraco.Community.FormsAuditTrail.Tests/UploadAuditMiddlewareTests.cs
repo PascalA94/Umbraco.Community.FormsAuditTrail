@@ -273,6 +273,51 @@ public class UploadAuditMiddlewareTests
         spy.Received(1).IsUploadRequest(Arg.Any<PathString>());
     }
 
+    [Theory]
+    [InlineData("/media/forms/upload./form_{0}/g/file.pdf")]
+    [InlineData("/media/forms/upload../form_{0}/g/file.pdf")]
+    [InlineData("/media/forms/upload. /form_{0}/g/file.pdf")]
+    [InlineData("/media/forms/upload /form_{0}/g/file.pdf")]
+    [InlineData("/media/forms/UPLOAD./form_{0}/g/file.pdf")]
+    [InlineData("/media/forms/upload.\\form_{0}\\g\\file.pdf")]
+    [InlineData("/media/forms/upload/form_{0}./g/file.pdf")]
+    [InlineData("/media/forms/upload/form_{0}/g./file.pdf")]
+    [InlineData("/media/forms/upload/form_{0}/g/file.pdf.")]
+    [InlineData("/media/forms/upload/form_{0}/g/file.pdf ")]
+    [InlineData("/media/forms/upload/./form_{0}/g/file.pdf")]
+    [InlineData("/media/forms/upload//form_{0}/g/../g/file.pdf")]
+    public async Task Middleware_WindowsEquivalentPathSegments_WriteOneRowForTheForm(string template) // @M2-FIX path segment normalisation
+    {
+        (DefaultHttpContext context, bool nextCalled) = await RunAsync(
+            string.Format(System.Globalization.CultureInfo.InvariantCulture, template, FormId), 200);
+
+        Assert.True(nextCalled);
+        Assert.Equal(200, context.Response.StatusCode);
+        AccessWrite write = Assert.Single(_writes);
+        Assert.Equal(AccessEventType.FileViewed, write.EventType);
+        Assert.Equal(FormId, write.FormId);
+    }
+
+    [Fact]
+    public async Task Middleware_ParentSegmentBeforeSecondFormFolder_RowCarriesTheSecondForm() // @M2-FIX path segment normalisation
+    {
+        var other = Guid.NewGuid();
+
+        await RunAsync($"/media/forms/upload/form_{FormId}/..\\form_{other}/g/file.pdf", 200);
+
+        Assert.Equal(other, Assert.Single(_writes).FormId);
+    }
+
+    [Fact]
+    public async Task Middleware_NormalisedPathWithUnresolvableForm_StillWritesRowFlaggedFormUnresolved() // @M2-FIX path segment normalisation
+    {
+        await RunAsync("/media/forms/upload./form_notaguid./g/file.pdf", 200);
+
+        AccessWrite write = Assert.Single(_writes);
+        Assert.Equal(Guid.Empty, write.FormId);
+        Assert.True(write.Detail!.FormUnresolved);
+    }
+
     [Fact]
     public async Task Middleware_ExpiredSession_KeepsUserAndFlagsDetail() // @M2-T12a fix1 item 2
     {

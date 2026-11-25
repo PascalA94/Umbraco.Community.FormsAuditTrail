@@ -1,7 +1,12 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Umbraco.Community.FormsAuditTrail.Authorization;
 using Umbraco.Community.FormsAuditTrail.Configuration;
+using Umbraco.Community.FormsAuditTrail.EntryAudit;
 using Umbraco.Community.FormsAuditTrail.Controllers;
 using Umbraco.Community.FormsAuditTrail.Controllers.Dtos;
 using Umbraco.Forms.Core.Security;
@@ -17,13 +22,21 @@ public class FormsAuditApiControllerTests : IDisposable
     private readonly TestDatabase _db = new();
     private readonly IFormsSecurity _formsSecurity = Substitute.For<IFormsSecurity>();
     private readonly FormsAuditTrailOptions _options = new();
+    private readonly IAuthorizationService _authorization = Substitute.For<IAuthorizationService>();
+    private readonly IAuditStateStore _state = Substitute.For<IAuditStateStore>();
+    private readonly IForeignValueHandlerDetector _detector = Substitute.For<IForeignValueHandlerDetector>();
+    private readonly EntryAuditHealth _health;
     private readonly FormsAuditApiController _sut;
 
     public FormsAuditApiControllerTests()
     {
         IOptionsMonitor<FormsAuditTrailOptions> optionsMonitor = Substitute.For<IOptionsMonitor<FormsAuditTrailOptions>>();
         optionsMonitor.CurrentValue.Returns(_options);
-        _sut = new FormsAuditApiController(_db.Context, _formsSecurity, optionsMonitor);
+        _health = new EntryAuditHealth(_state, TimeProvider.System);
+        _sut = new FormsAuditApiController(_db.Context, _formsSecurity, optionsMonitor, _authorization, _health, TimeProvider.System, _detector, Microsoft.Extensions.Logging.Abstractions.NullLogger<FormsAuditApiController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
         _db.AddEntry(_formA, "Form A", DateTime.UtcNow.AddHours(-2));
         _db.AddEntry(_formA, "Form A", DateTime.UtcNow.AddHours(-1));
         _db.AddEntry(_formB, "Form B", DateTime.UtcNow);
@@ -124,14 +137,153 @@ public class FormsAuditApiControllerTests : IDisposable
         Assert.Equal("text/csv", file.ContentType);
     }
 
+    private void SetAccessLogAccess(bool allowed) =>
+        _authorization.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), AccessLogPolicy.Name)
+            .Returns(allowed ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+
+    private async Task<AuditConfigDto> GetConfig() => AssertOk<AuditConfigDto>((await _sut.GetConfig()).Result);
+
     [Fact]
-    public void GetConfig_ReflectsCsvExportSetting()
+    public async Task GetConfig_ReflectsCsvExportSetting() // @M4-T15
     {
+        SetAccessLogAccess(false);
         _options.EnableCsvExport = false;
 
-        AuditConfigDto config = AssertOk<AuditConfigDto>(_sut.GetConfig().Result);
+        AuditConfigDto config = await GetConfig();
 
         Assert.False(config.CsvExportEnabled);
+    }
+
+    [Fact]
+    public async Task GetConfig_ReportsEntryAuditFieldsAndAccess()
+    {
+        SetAccessLogAccess(true);
+        _options.EntryAudit.Enabled = true;
+        _options.EntryAudit.RetentionDays = 30;
+        _options.EntryAudit.EditValueRetentionDays = 7;
+
+        AuditConfigDto config = await GetConfig();
+
+        Assert.True(config.EntryAuditEnabled);
+        Assert.True(config.CanReadAccessLog);
+        Assert.Equal(30, config.AccessRetentionDays);
+        Assert.Equal(7, config.EditValueRetentionDays);
+        Assert.NotNull(config.EntryAuditHealthy);
+        Assert.NotNull(config.HealthReasons);
+        Assert.Equal(0, config.WriteFailuresSinceStart);
+        Assert.NotNull(config.OffPeriods);
+    }
+
+    [Fact]
+    public async Task GetConfig_HealthFieldsOnlyForAccessLogUsers() // T8
+    {
+        _health.RecordWriteFailure(Models.AccessEventType.ListViewed, Guid.Empty);
+        SetAccessLogAccess(false);
+
+        AuditConfigDto config = await GetConfig();
+
+        Assert.False(config.CanReadAccessLog);
+        Assert.Null(config.EntryAuditHealthy);
+        Assert.Null(config.HealthReasons);
+        Assert.Null(config.LastWriteFailureUtc);
+        Assert.Null(config.WriteFailuresSinceStart);
+        Assert.Null(config.LastJobRunUtc);
+        Assert.Null(config.ForeignValueHandlers);
+        Assert.Null(config.OffPeriods);
+
+        SetAccessLogAccess(true);
+        AuditConfigDto reader = await GetConfig();
+
+        Assert.False(reader.EntryAuditHealthy);
+        Assert.Contains(EntryAuditHealth.WriteFailuresReason, reader.HealthReasons!);
+        Assert.Equal(1, reader.WriteFailuresSinceStart);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetConfig_ForeignValueHandlers_ComesFromTheDetector_WhenEditValuesAreStored(bool found) // @M3-T13 R44
+    {
+        SetAccessLogAccess(true);
+        _options.EntryAudit.StoreEditValues = StoreEditValuesMode.MaskSensitive;
+        _detector.HasForeignValueHandlers.Returns(found);
+
+        AuditConfigDto config = await GetConfig();
+
+        Assert.Equal(found, config.ForeignValueHandlers);
+        Assert.Equal(StoreEditValuesMode.MaskSensitive, config.StoreEditValues);
+    }
+
+    [Fact]
+    public async Task GetConfig_ForeignValueHandlers_IsNull_WhenEditValuesAreNotStored() // @M3-T13 R44
+    {
+        SetAccessLogAccess(true);
+        _options.EntryAudit.StoreEditValues = StoreEditValuesMode.None;
+        _detector.HasForeignValueHandlers.Returns(true);
+
+        AuditConfigDto config = await GetConfig();
+
+        Assert.Null(config.ForeignValueHandlers);
+        Assert.Equal(StoreEditValuesMode.None, config.StoreEditValues);
+    }
+
+    [Fact]
+    public async Task GetConfig_StoreEditValues_OnlyForAccessLogUsers() // @M4-T17b R50
+    {
+        SetAccessLogAccess(false);
+        _detector.HasForeignValueHandlers.Returns(true);
+
+        AuditConfigDto config = await GetConfig();
+
+        Assert.Null(config.StoreEditValues);
+        Assert.Null(config.ForeignValueHandlers);
+    }
+
+    [Theory]
+    [InlineData(StoreEditValuesMode.None, "None")]
+    [InlineData(StoreEditValuesMode.MaskSensitive, "MaskSensitive")]
+    [InlineData(StoreEditValuesMode.All, "All")]
+    public async Task GetConfig_StoreEditValues_SerialisesAsTheEnumName(StoreEditValuesMode mode, string expected) // @M4-T17b R50
+    {
+        SetAccessLogAccess(true);
+        _options.EntryAudit.StoreEditValues = mode;
+
+        AuditConfigDto config = await GetConfig();
+        string json = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        Assert.Contains($"\"storeEditValues\":\"{expected}\"", json);
+    }
+
+    [Fact]
+    public async Task GetConfig_AuthorisationThrows_StillReturnsDefinitionFieldsWithoutAccessLog()
+    {
+        _authorization.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), AccessLogPolicy.Name)
+            .Returns<AuthorizationResult>(_ => throw new InvalidOperationException("user lookup failed"));
+        _options.EnableCsvExport = false;
+        _options.EntryAudit.RetentionDays = 12;
+
+        AuditConfigDto config = await GetConfig();
+
+        Assert.False(config.CanReadAccessLog);
+        Assert.False(config.CsvExportEnabled);
+        Assert.Equal(12, config.AccessRetentionDays);
+        Assert.Null(config.EntryAuditHealthy);
+    }
+
+    [Fact]
+    public async Task GetConfig_EntryAuditCsvEnabled_FollowsSplitSetting() // T20
+    {
+        SetAccessLogAccess(false);
+        _options.EnableCsvExport = true;
+        _options.EntryAudit.EnableCsvExport = false;
+
+        Assert.False((await GetConfig()).EntryAuditCsvEnabled);
+        Assert.True((await GetConfig()).CsvExportEnabled);
+
+        _options.EntryAudit.EnableCsvExport = null;
+        _options.EnableCsvExport = false;
+
+        Assert.False((await GetConfig()).EntryAuditCsvEnabled);
     }
 
     private static T AssertOk<T>(ActionResult? result)

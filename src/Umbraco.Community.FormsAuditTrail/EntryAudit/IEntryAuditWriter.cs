@@ -12,5 +12,5 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// </remarks>
 public interface IEntryAuditWriter
 {
-    Task<AccessWriteResult> WriteAsync(AccessWrite write);
+    internal Task<AccessWriteResult> WriteAsync(AccessWrite write);
 }

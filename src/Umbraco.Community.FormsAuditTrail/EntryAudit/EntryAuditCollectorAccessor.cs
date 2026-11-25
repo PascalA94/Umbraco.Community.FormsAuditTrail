@@ -7,7 +7,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 public interface IEntryAuditCollectorAccessor
 {
     /// <summary>The request's collector, or null outside an HTTP request (workflows and background jobs never capture).</summary>
-    EntryAuditCollector? Current { get; }
+    internal EntryAuditCollector? Current { get; }
 }
 
 /// <summary>

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Hosting;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Events;
@@ -14,7 +13,7 @@ namespace Umbraco.Community.FormsAuditTrail.DemoSite;
 /// a real site would corrupt every short-text value it reads, which is why it is off unless asked for twice over.
 /// </summary>
 /// <remarks>
-/// Active only when <c>E2E:SimulateEncryption</c> is true and the environment is Development. It reverses short-text
+/// Active only when <c>E2E:SimulateEncryption</c> is true and the host environment is Development. It reverses short-text
 /// values on read, standing in for decryption of values stored reversed. Prevalue fields and upload paths are left
 /// alone: Forms validates those on save and a one-way stand-in cannot round-trip them (S10 saw 400s when it tried).
 /// </remarks>
@@ -24,10 +23,8 @@ public sealed class SimulatedEncryptionComposer : IComposer
 
     public void Compose(IUmbracoBuilder builder)
     {
-        // The environment comes from configuration because no hosting environment exists yet at compose time. A
-        // missing value is not Development, so the stand-in stays off (fail closed).
-        bool development = string.Equals(builder.Config[HostDefaults.EnvironmentKey], Environments.Development, StringComparison.OrdinalIgnoreCase);
-        if (!development || !builder.Config.GetValue<bool>(SettingKey))
+        // Host environment, not a configuration key: see E2EGate.
+        if (!E2EGate.IsEnabled(builder, SettingKey))
         {
             return;
         }
@@ -45,10 +42,18 @@ public sealed class SimulatedDecryptionHandler(IFormService formService, ILogger
 
     public void Handle(RecordFetchingNotification notification)
     {
-        HashSet<Guid> textFields = formService.Get(notification.Record.Form)?.AllFields
+        // Only the seeded encrypted form stores reversed values. Reversing plaintext forms too would make the stand-in
+        // corrupt every other form's before values, which the capture specs rightly report as wrong.
+        var form = formService.Get(notification.Record.Form);
+        if (form?.Name != E2ESeeder.EncryptedFormName)
+        {
+            return;
+        }
+
+        HashSet<Guid> textFields = form.AllFields
             .Where(f => f.FieldTypeId == ShortTextFieldType)
             .Select(f => f.Id)
-            .ToHashSet() ?? [];
+            .ToHashSet();
 
         int reversed = 0;
         foreach (var field in notification.Record.RecordFields.Values.Where(f => textFields.Contains(f.FieldId)))

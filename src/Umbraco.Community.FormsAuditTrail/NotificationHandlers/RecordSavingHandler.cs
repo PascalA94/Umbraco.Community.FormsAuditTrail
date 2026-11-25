@@ -15,7 +15,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// Turns the record Forms is about to save into what the capture core writes after the action (spec 7.3 handler steps
 /// 1 to 5): a diff for a backoffice edit, the captions of the submitted fields for a backoffice create (P4). At
 /// <c>RecordSaving</c> the notification holds the after values and the before values were copied by the filter, through
-/// Forms' own read path, before the action ran (SEC-04). So this handler reads no database and writes nothing: a write
+/// Forms' own read path, before the action ran (SEC-04). So this handler reads no database and writes nothing (the form is read by the filter beforehand): a write
 /// here would run inside Forms' save scope, which locks SQLite (S3, S5).
 /// </summary>
 /// <remarks>
@@ -23,7 +23,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// provider is scoped and reached through the request, never injected, so this handler holds nothing scoped (P2). It
 /// never throws, because it runs inside Forms' save.
 /// </remarks>
-public sealed class RecordSavingHandler(
+internal sealed class RecordSavingHandler(
     IEntryAuditCollectorAccessor accessor,
     IHttpContextAccessor httpContextAccessor,
     IOptionsMonitor<FormsAuditTrailOptions> options,
@@ -40,6 +40,12 @@ public sealed class RecordSavingHandler(
 
             foreach (Record record in notification.SavedEntities)
             {
+                // The window is for the form in the route; a record of any other form is not this request's.
+                if (window.FormId is { } formId && record.Form != formId)
+                {
+                    continue;
+                }
+
                 if (window.Kind == AccessEventType.Edited)
                 {
                     HandleEdit(collector, window, record);
@@ -100,8 +106,12 @@ public sealed class RecordSavingHandler(
         collector.SetCreated(record.Form, record.UniqueId, captions);
     }
 
+    // Never GetFields: that reads the form through IFormService, and this runs inside Forms' save scope. On SQLite a
+    // read there opens a deferred snapshot before Forms' INSERT, and a commit by another connection in between (Umbraco's
+    // job runner writes every 5 s) makes the INSERT fail with an unrecoverable 'database is locked'. The action filter
+    // reads the form before the action runs, outside that scope.
     private IReadOnlyDictionary<Guid, FieldInfo> Fields(Guid formId) =>
-        httpContextAccessor.HttpContext?.RequestServices.GetService<IFormFieldInfoProvider>()?.GetFields(formId)
-        // No provider means no captions or sensitivity: the differ then masks every field under MaskSensitive.
+        httpContextAccessor.HttpContext?.RequestServices.GetService<IFormFieldInfoProvider>()?.GetLoadedFields(formId)
+        // No provider, or a form the filter could not read, means no captions or sensitivity: the differ then masks every field under MaskSensitive.
         ?? new Dictionary<Guid, FieldInfo>();
 }

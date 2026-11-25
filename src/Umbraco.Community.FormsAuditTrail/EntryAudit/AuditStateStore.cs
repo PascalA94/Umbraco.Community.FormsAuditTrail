@@ -8,10 +8,10 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// <summary>Small key-value store backed by <c>formsAuditTrailState</c>, shared by every server in a load-balanced site.</summary>
 public interface IAuditStateStore
 {
-    Task<string?> GetAsync(string key, CancellationToken ct);
+    internal Task<string?> GetAsync(string key, CancellationToken ct);
 
     /// <summary>Inserts or replaces. Throws <see cref="ArgumentException"/> when <paramref name="json"/> exceeds the column width.</summary>
-    Task SetAsync(string key, string json, CancellationToken ct);
+    internal Task SetAsync(string key, string json, CancellationToken ct);
 }
 
 /// <summary>Holds only the scope factory so it can be a singleton; the scoped DbContext is resolved per call (P2).</summary>

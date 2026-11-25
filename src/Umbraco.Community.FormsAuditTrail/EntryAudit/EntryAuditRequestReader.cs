@@ -19,7 +19,7 @@ internal sealed record CaptureRequest(
 /// <summary>
 /// Reads the form id, record id and filter context from a Forms Management API request, using the parameter sources
 /// spike S1 recorded on Forms 18.2.2 (docs/spikes.md S1). Returns the raw detail: the capture core hashes it for dedupe
-/// before shaping it for storage (R33), so a search term never leaves memory unless capture is switched on.
+/// before shaping it for storage, so a search term never leaves memory unless capture is switched on.
 /// </summary>
 internal static class EntryAuditRequestReader
 {

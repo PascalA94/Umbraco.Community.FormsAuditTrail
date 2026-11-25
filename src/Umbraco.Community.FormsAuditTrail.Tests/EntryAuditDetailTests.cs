@@ -10,7 +10,8 @@ public class EntryAuditDetailTests
     [
         "v", "filter", "page", "pageSize", "exportType", "fileName", "recordIdsCaptured", "bulk", "deleteKind",
         "formUnresolved", "userUnresolved", "truncated", "originalLengths", "workflowId", "fieldCaptions",
-        "filePathHash", "memberKey", "memberIdentifierUsed", "config", "gap", "beforeUnavailable",
+        "filePathHash", "memberKey", "memberIdentifierUsed", "config", "gap", "beforeUnavailable", "requestedCount",
+        "subjectUserKey", "eventType", "server", "sessionExpired", "valuesScrubIncomplete",
     ];
 
     private static EntryAuditDetail Everything() => new()
@@ -25,6 +26,7 @@ public class EntryAuditDetailTests
         DeleteKind = "single",
         FormUnresolved = false,
         UserUnresolved = false,
+        SessionExpired = false,
         Truncated = false,
         OriginalLengths = new Dictionary<string, int> { ["formName"] = 600 },
         WorkflowId = Guid.NewGuid(),
@@ -35,7 +37,22 @@ public class EntryAuditDetailTests
         Config = new Dictionary<string, ConfigValueChange> { ["Enabled"] = new("true", "false") },
         Gap = new AuditGapInfo(2, DateTime.UtcNow, DateTime.UtcNow, ["ListViewed"]),
         BeforeUnavailable = false,
+        ValuesScrubIncomplete = true,
+        SubjectUserKey = Guid.NewGuid(),
+        EventType = 12,
+        Server = "web-1",
+        RequestedCount = 3,
     };
+
+    [Fact]
+    public void Detail_EveryPublicProperty_IsAnAllowedKey() // merge: both tracks added keys; a new one must be listed here
+    {
+        IEnumerable<string> keys = typeof(EntryAuditDetail)
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name));
+
+        Assert.All(keys, k => Assert.Contains(k, AllowedKeys));
+    }
 
     [Fact]
     public void Detail_ToJson_WritesVersionAndOnlyAllowedKeys()
@@ -105,6 +122,46 @@ public class EntryAuditDetailTests
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(json) <= 8192);
         using JsonDocument doc = JsonDocument.Parse(json);
         Assert.True(doc.RootElement.GetProperty("truncated").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Detail_ToJson_LastResortFallback_KeepsTheEvidenceFlags(bool flag) // @FINAL-FIX item 8 SEC-02
+    {
+        // An unshaped file name is the one large value no drop step removes, so it forces the last-resort fallback.
+        EntryAuditDetail detail = Everything() with
+        {
+            FileName = new string('f', 9000),
+            RecordIdsCaptured = flag,
+            FormUnresolved = flag,
+            UserUnresolved = flag,
+            ValuesScrubIncomplete = flag,
+            SessionExpired = flag,
+        };
+
+        string json = detail.ToJson(maxBytes: 8192);
+
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(json) <= 8192);
+        using JsonDocument doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.TryGetProperty("fileName", out _));
+        Assert.Equal(1, doc.RootElement.GetProperty("v").GetInt32());
+        Assert.True(doc.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("recordIdsCaptured").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("formUnresolved").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("userUnresolved").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("valuesScrubIncomplete").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("sessionExpired").GetBoolean());
+        Assert.Equal(["v", "recordIdsCaptured", "formUnresolved", "userUnresolved", "sessionExpired", "truncated", "valuesScrubIncomplete"], doc.RootElement.EnumerateObject().Select(p => p.Name));
+    }
+
+    [Fact]
+    public void Detail_ToJson_LastResortFallback_OmitsFlagsThatWereNeverSet() // @FINAL-FIX item 8
+    {
+        string json = new EntryAuditDetail { FileName = new string('f', 9000) }.ToJson(maxBytes: 8192);
+
+        using JsonDocument doc = JsonDocument.Parse(json);
+        Assert.Equal(["v", "truncated"], doc.RootElement.EnumerateObject().Select(p => p.Name));
     }
 
     [Fact]

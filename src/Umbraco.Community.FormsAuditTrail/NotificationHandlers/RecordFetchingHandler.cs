@@ -14,7 +14,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// Forms also publishes this notification from workflow execution with no request (S1), and from our own before-value
 /// read; with no open window it returns at once. It never throws, because it runs in Forms' record read path.
 /// </remarks>
-public sealed class RecordFetchingHandler(
+internal sealed class RecordFetchingHandler(
     IEntryAuditCollectorAccessor accessor,
     ILogger<RecordFetchingHandler> logger) : INotificationHandler<RecordFetchingNotification>
 {
