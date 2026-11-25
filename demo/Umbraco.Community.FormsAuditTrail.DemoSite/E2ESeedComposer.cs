@@ -263,12 +263,12 @@ internal sealed class E2ESeeder(
         return relative;
     }
 
-    private async Task EnsureUserAsync(string email, string name, string passwordKey, string groupAlias, string groupName, Guid contactFormId, Guid? encryptedFormId)
+    private async Task EnsureUserAsync(string email, string name, string configKey, string groupAlias, string groupName, Guid contactFormId, Guid? encryptedFormId)
     {
-        string? password = config[passwordKey];
+        string? password = config[configKey];
         if (string.IsNullOrWhiteSpace(password))
         {
-            logger.LogWarning("{Key} is not set, so the {Email} user was not created.", passwordKey, email);
+            logger.LogWarning("{Key} is not set, so the {UserName} user was not created.", configKey, name);
             return;
         }
 
