@@ -10,7 +10,8 @@ public class EntryAuditDetailTests
     [
         "v", "filter", "page", "pageSize", "exportType", "fileName", "recordIdsCaptured", "bulk", "deleteKind",
         "formUnresolved", "userUnresolved", "truncated", "originalLengths", "workflowId", "fieldCaptions",
-        "filePathHash", "memberKey", "memberIdentifierUsed", "config", "gap", "beforeUnavailable",
+        "filePathHash", "memberKey", "memberIdentifierUsed", "config", "gap", "beforeUnavailable", "requestedCount",
+        "subjectUserKey", "eventType", "server", "sessionExpired", "valuesScrubIncomplete",
     ];
 
     private static EntryAuditDetail Everything() => new()
@@ -25,6 +26,7 @@ public class EntryAuditDetailTests
         DeleteKind = "single",
         FormUnresolved = false,
         UserUnresolved = false,
+        SessionExpired = false,
         Truncated = false,
         OriginalLengths = new Dictionary<string, int> { ["formName"] = 600 },
         WorkflowId = Guid.NewGuid(),
@@ -35,7 +37,22 @@ public class EntryAuditDetailTests
         Config = new Dictionary<string, ConfigValueChange> { ["Enabled"] = new("true", "false") },
         Gap = new AuditGapInfo(2, DateTime.UtcNow, DateTime.UtcNow, ["ListViewed"]),
         BeforeUnavailable = false,
+        ValuesScrubIncomplete = true,
+        SubjectUserKey = Guid.NewGuid(),
+        EventType = 12,
+        Server = "web-1",
+        RequestedCount = 3,
     };
+
+    [Fact]
+    public void Detail_EveryPublicProperty_IsAnAllowedKey() // merge: both tracks added keys; a new one must be listed here
+    {
+        IEnumerable<string> keys = typeof(EntryAuditDetail)
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name));
+
+        Assert.All(keys, k => Assert.Contains(k, AllowedKeys));
+    }
 
     [Fact]
     public void Detail_ToJson_WritesVersionAndOnlyAllowedKeys()

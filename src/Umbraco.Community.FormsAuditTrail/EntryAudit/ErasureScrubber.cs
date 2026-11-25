@@ -15,11 +15,17 @@ internal static class ErasureScrubber
     /// <summary>Rows per statement when a whole form is scrubbed, so one form with millions of edits is not one transaction.</summary>
     internal const int FormBatchSize = 5000;
 
+    /// <param name="formId">
+    /// When set, only edits recorded against that form are scrubbed. The in-request scrub passes the request's form so
+    /// a delete request naming another form's record ids cannot erase that form's edit history; reconciliation, which
+    /// has checked the records are really gone, passes none.
+    /// </param>
     public static async Task<int> ScrubRecordsAsync(
         FormsAuditDbContext db,
         IReadOnlyCollection<Guid> recordIds,
         DateTime nowUtc,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid? formId = null)
     {
         var total = 0;
         foreach (Guid?[] batch in recordIds.Distinct().Select(id => (Guid?)id).Chunk(RecordBatchSize))
@@ -27,7 +33,7 @@ internal static class ErasureScrubber
             // A batch can hold more rows than RecordBatchSize when a record was edited many times; that is one
             // statement over indexed rows, bounded by the number of edits of 500 records.
             total += await db.EntryChanges
-                .Where(c => c.ValuesScrubbedAt == null && batch.Contains(c.Access!.RecordId))
+                .Where(c => c.ValuesScrubbedAt == null && batch.Contains(c.Access!.RecordId) && (formId == null || c.Access!.FormId == formId))
                 .ExecuteUpdateAsync(
                     s => s.SetProperty(c => c.OldValue, (string?)null)
                         .SetProperty(c => c.NewValue, (string?)null)

@@ -68,6 +68,24 @@ public sealed record EntryAuditDetail
     public bool? BeforeUnavailable { get; init; }
 
     /// <summary>
+    /// Set on an <c>Edited</c> row whose cleared-field scrub of earlier rows failed (SEC-03); the daily retention job
+    /// finishes the scrub, so the flag says the earlier values may still be stored until it has run.
+    /// </summary>
+    public bool? ValuesScrubIncomplete { get; init; }
+
+    /// <summary>The server that recorded a <c>ConfigChanged</c> row, because each server records its own configuration.</summary>
+    public string? Server { get; init; }
+
+    /// <summary>The user key an access-log search filtered on: who was searched for (SEC-06). A key, never a name.</summary>
+    public Guid? SubjectUserKey { get; init; }
+
+    /// <summary>The event type an access-log search filtered on (SEC-06).</summary>
+    public int? EventType { get; init; }
+
+    /// <summary>How many entries a delete request asked for, kept when Forms published no deletion to prove them (R63).</summary>
+    public int? RequestedCount { get; init; }
+
+    /// <summary>
     /// Applies the privacy rules before anything is stored: a search term is kept only when
     /// <paramref name="captureSearchTerms"/> is on (otherwise the fact of a search is kept), a file name is capped, and
     /// a member identifier is kept only when it is a key (E16), since a GUID or integer cannot be an email address.

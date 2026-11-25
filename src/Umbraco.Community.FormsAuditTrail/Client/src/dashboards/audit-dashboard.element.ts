@@ -4,6 +4,7 @@ import { customElement, state } from '@umbraco-cms/backoffice/external/lit';
 import { UMB_AUTH_CONTEXT } from '@umbraco-cms/backoffice/auth';
 import type { AuditEntryListDto, FormSummaryDto, UserSummaryDto } from '../services/audit-api.service.js';
 import { getConfig, getEntries, getForms, getUsers, exportCsv } from '../services/audit-api.service.js';
+import { bearerToken } from '../utils/view-helpers.js';
 import '../components/audit-diff-viewer.element.js';
 
 const DATE_PRESETS = [
@@ -64,7 +65,7 @@ export class AuditDashboardElement extends UmbLitElement {
   }
 
   private async _getToken(): Promise<string | undefined> {
-    return (await this._authContext?.getLatestToken()) ?? undefined;
+    return bearerToken(this._authContext);
   }
 
   private async _load() {
@@ -192,7 +193,7 @@ export class AuditDashboardElement extends UmbLitElement {
                           ${entry.eventType}
                         </uui-tag>
                       </uui-table-cell>
-                      <uui-table-cell>${entry.changeSummary ?? '—'}</uui-table-cell>
+                      <uui-table-cell>${entry.changeSummary ?? 'None'}</uui-table-cell>
                     </uui-table-row>
                   `)}
                 </uui-table>

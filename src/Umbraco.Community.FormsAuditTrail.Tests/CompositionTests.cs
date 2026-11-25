@@ -38,6 +38,7 @@ public class CompositionTests
         typeof(EntryAudit.EntryAuditDeduplicator),
         typeof(EntryAudit.EntryAuditHealth),
         typeof(EntryAudit.EntryAuditWriter),
+        typeof(EntryAudit.ConfigChangeRecorder),
         typeof(EntryAudit.EntryAuditCapture),
         typeof(EntryAudit.FormFieldInfoProvider),
         typeof(EntryAudit.IForeignValueHandlerDetector), // factory-registered: it needs the composer's final service collection
@@ -46,6 +47,8 @@ public class CompositionTests
         typeof(NotificationHandlers.EntrySearchResultFetchingHandler),
         typeof(NotificationHandlers.RecordFetchingHandler),
         typeof(NotificationHandlers.RecordSavingHandler),
+        typeof(NotificationHandlers.RecordDeletingHandler),
+        typeof(EntryAudit.DeletedRecordScrubber),
         typeof(FormSnapshotService),
         typeof(FormDiffService),
         typeof(NotificationHandlers.FormSavingHandler),
@@ -53,6 +56,9 @@ public class CompositionTests
         typeof(NotificationHandlers.FormDeletingHandler),
         typeof(NotificationHandlers.FormDeletedHandler),
         typeof(NotificationHandlers.RunAuditMigration),
+        typeof(Authorization.AccessLogAuthorizationHandler),
+        typeof(Authorization.AccessLogGroupAliasCheck),
+        typeof(EntryAudit.SensitiveDataPermission),
     ];
 
     /// <summary>
@@ -60,7 +66,7 @@ public class CompositionTests
     /// they are not descriptors. Tasks 12 (<c>EntryAuditActionFilter</c>) and 12a (<c>UploadAuditMiddleware</c>) add
     /// themselves here and are then created through <see cref="ActivatorUtilities"/> exactly as MVC and the pipeline do.
     /// </summary>
-    internal static readonly Type[] ActivatorUtilitiesTypes = [typeof(EntryAudit.EntryAuditActionFilter), typeof(EntryAudit.UploadAuditMiddleware)];
+    internal static readonly Type[] ActivatorUtilitiesTypes = [typeof(EntryAudit.EntryAuditActionFilter), typeof(EntryAudit.UploadAuditMiddleware), typeof(Controllers.FormsAuditApiController), typeof(Controllers.FormsAuditAccessApiController)];
 
     [Fact]
     public void Compose_ValidateScopesAndOnBuild_ResolvesEveryPackageType() // P2
@@ -96,6 +102,24 @@ public class CompositionTests
         {
             var mvc = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Mvc.MvcOptions>>().Value;
             Assert.Single(mvc.Filters.OfType<Microsoft.AspNetCore.Mvc.TypeFilterAttribute>(), f => f.ImplementationType == typeof(EntryAudit.EntryAuditActionFilter));
+        }
+    }
+
+    [Fact]
+    public void Compose_StartedHandlers_IncludeTheSingletonRecorder_AfterTheMigration() // R53 item 1, item 8
+    {
+        (_, ServiceProvider provider) = BuildProvider();
+        using (provider)
+        {
+            var handlers = provider
+                .GetServices<Umbraco.Cms.Core.Events.INotificationAsyncHandler<Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification>>()
+                .ToList();
+
+            int recorder = handlers.FindIndex(h => ReferenceEquals(h, provider.GetRequiredService<EntryAudit.ConfigChangeRecorder>()));
+            int migration = handlers.FindIndex(h => h is NotificationHandlers.RunAuditMigration);
+            Assert.True(recorder >= 0, "The recorder singleton is not among the started handlers.");
+            Assert.True(migration >= 0);
+            Assert.True(recorder > migration, "The recorder must run after RunAuditMigration.");
         }
     }
 
@@ -139,7 +163,22 @@ public class CompositionTests
             var detector = provider.GetRequiredService<EntryAudit.IForeignValueHandlerDetector>();
 
             Assert.Same(detector, provider.GetRequiredService<EntryAudit.IForeignValueHandlerDetector>());
-            Assert.True(provider.GetServices<Umbraco.Cms.Core.Events.INotificationAsyncHandler<Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification>>().Any(h => ReferenceEquals(h, detector)));
+            Assert.Contains(provider.GetServices<Umbraco.Cms.Core.Events.INotificationAsyncHandler<Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification>>(), h => ReferenceEquals(h, detector));
+        }
+    }
+
+    [Fact]
+    public void Compose_AccessLogPolicyIsRegisteredAndItsHandlerIsNeverScoped() // @M4-T15, UserActivity S6
+    {
+        (ServiceCollection services, ServiceProvider provider) = BuildProvider();
+        using (provider)
+        {
+            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Authorization.AuthorizationOptions>>().Value;
+            Assert.NotNull(options.GetPolicy(Authorization.AccessLogPolicy.Name));
+
+            ServiceDescriptor handler = Assert.Single(services, d => d.ImplementationType == typeof(Authorization.AccessLogAuthorizationHandler));
+            Assert.Equal(typeof(Microsoft.AspNetCore.Authorization.IAuthorizationHandler), handler.ServiceType);
+            Assert.NotEqual(ServiceLifetime.Scoped, handler.Lifetime);
         }
     }
 
@@ -158,6 +197,66 @@ public class CompositionTests
             await started.HandleAsync(new Umbraco.Cms.Core.Notifications.UmbracoApplicationStartedNotification(false), CancellationToken.None);
 
             Assert.False(detector.HasForeignValueHandlers);
+        }
+    }
+
+    [Fact]
+    public async Task Compose_AccessLogPolicyShape_CarriesSchemeAuthenticatedUserAndSectionRequirements() // @M4-T15 fix1, merge-fix 21 R75
+    {
+        // The scheme is the Management API token scheme that Forms' SectionAccessForms and Umbraco's policies name. The
+        // backoffice cookie scheme was pinned here until the demo showed its forbid redirecting a denied API caller to
+        // the login page (302) instead of 403; ruling R75 moved the policy to the token scheme, and the cookie must stay out.
+        (_, ServiceProvider provider) = BuildProvider(realAuthorization: true);
+        using (provider)
+        {
+            var policy = await provider.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider>()
+                .GetPolicyAsync(Authorization.AccessLogPolicy.Name);
+
+            Assert.NotNull(policy);
+            Assert.Equal([OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme], policy.AuthenticationSchemes);
+            Assert.DoesNotContain(Umbraco.Cms.Core.Constants.Security.BackOfficeAuthenticationType, policy.AuthenticationSchemes);
+            Assert.Contains(policy.Requirements, r => r is Microsoft.AspNetCore.Authorization.Infrastructure.DenyAnonymousAuthorizationRequirement);
+            Assert.Contains(policy.Requirements, r => r is Umbraco.Forms.Web.Authorization.SectionAccess.SectionAccessRequirement s && s.SectionAliases.Contains("forms"));
+            Assert.Contains(policy.Requirements, r => r is Authorization.AccessLogRequirement);
+        }
+    }
+
+    [Theory]
+    [InlineData("admin", true, true)]
+    [InlineData("editor", true, false)]
+    [InlineData("admin", false, false)] // the real Forms section check must be able to deny on its own
+    public async Task Compose_RealAuthorizationService_AuthorisesBackofficePrincipalAgainstThePolicy(string group, bool formsSection, bool expected) // @M4-T15 fix1, @M4-T16 fix1
+    {
+        (ServiceCollection services, ServiceProvider provider) = BuildProvider(realAuthorization: true);
+        using (provider)
+        {
+            // Only the Umbraco boundary is substituted: the user service and the helper that turns the principal into a
+            // user. Forms' real section handler, the policy, the real IAuthorizationService and our handler are composed.
+            var key = Guid.NewGuid();
+            var groupSub = Substitute.For<Umbraco.Cms.Core.Models.Membership.IReadOnlyUserGroup>();
+            groupSub.Alias.Returns(group);
+            var user = Substitute.For<Umbraco.Cms.Core.Models.Membership.IUser>();
+            user.IsApproved.Returns(true);
+            user.Groups.Returns(new List<Umbraco.Cms.Core.Models.Membership.IReadOnlyUserGroup> { groupSub });
+            user.AllowedSections.Returns(formsSection ? ["content", "forms"] : ["content"]);
+            provider.GetRequiredService<IUserService>().GetAsync(key).Returns(user);
+            var helper = provider.GetRequiredService<Umbraco.Cms.Core.Security.Authorization.IAuthorizationHelper>();
+            helper.TryGetUmbracoUser(Arg.Any<System.Security.Principal.IPrincipal>(), out Arg.Any<Umbraco.Cms.Core.Models.Membership.IUser?>())
+                .Returns(call =>
+                {
+                    call[1] = user;
+                    return true;
+                });
+            helper.GetUmbracoUser(Arg.Any<System.Security.Principal.IPrincipal>()).Returns(user);
+
+            var principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim("sub", key.ToString())], Umbraco.Cms.Core.Constants.Security.BackOfficeAuthenticationType));
+
+            using IServiceScope scope = provider.CreateScope();
+            var authorization = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+            var result = await authorization.AuthorizeAsync(principal, null, Authorization.AccessLogPolicy.Name);
+
+            Assert.Equal(expected, result.Succeeded);
         }
     }
 
@@ -185,11 +284,6 @@ public class CompositionTests
         // list. Any concrete package class named like a service must be listed, created by ActivatorUtilities, or be an
         // explicit, reasoned exception.
         string[] serviceSuffixes = ["Handler", "Job", "Store", "Reader", "Collector", "Accessor", "Deduplicator", "Writer", "Health", "Middleware", "Filter", "Service"];
-        Dictionary<Type, string> notInjected = new()
-        {
-            [typeof(Controllers.FormsAuditApiController)] = "An MVC controller, activated by MVC and not registered in the container.",
-        };
-
         Type[] candidates = PackageAssembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false, IsNested: false } && !t.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
             // Records are data shapes (EntryAuditFilter ends in "Filter" but is not an MVC filter).
@@ -198,7 +292,7 @@ public class CompositionTests
             .ToArray();
 
         Type[] unaccounted = candidates
-            .Where(t => !ExpectedPackageTypes.Contains(t) && !ActivatorUtilitiesTypes.Contains(t) && !notInjected.ContainsKey(t))
+            .Where(t => !ExpectedPackageTypes.Contains(t) && !ActivatorUtilitiesTypes.Contains(t))
             .ToArray();
 
         Assert.True(unaccounted.Length == 0,
@@ -210,7 +304,7 @@ public class CompositionTests
             || d.ImplementationType?.Assembly == PackageAssembly
             || (d.ImplementationFactory is not null && d.ServiceType.Assembly == PackageAssembly));
 
-    private static (ServiceCollection Services, ServiceProvider Provider) BuildProvider()
+    private static (ServiceCollection Services, ServiceProvider Provider) BuildProvider(bool realAuthorization = false)
     {
         IConfiguration config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -225,7 +319,7 @@ public class CompositionTests
 
         services.AddSingleton(config);
         services.AddLogging();
-        RegisterConsumedUmbracoServices(services);
+        RegisterConsumedUmbracoServices(services, realAuthorization);
 
         new FormsAuditComposer().Compose(builder);
 
@@ -238,12 +332,13 @@ public class CompositionTests
     /// Substitutes for the Umbraco and Forms services the package consumes, at the lifetimes spike S1 recorded from a
     /// running site. None is Scoped, so a singleton of ours may take any of them directly.
     /// </summary>
-    private static void RegisterConsumedUmbracoServices(IServiceCollection services)
+    private static void RegisterConsumedUmbracoServices(IServiceCollection services, bool realAuthorization = false)
     {
         services.AddSingleton(Substitute.For<Umbraco.Forms.Core.Services.IFormService>());
         services.AddSingleton(Substitute.For<Umbraco.Forms.Core.Data.Storage.IRecordStorage>());
         services.AddSingleton(Substitute.For<Umbraco.Forms.Core.Security.IFormsSecurity>());
         services.AddSingleton(Substitute.For<IUserService>());
+        services.AddSingleton(Substitute.For<IUserGroupService>());
         services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Scoping.ICoreScopeProvider>());
         services.AddSingleton(Substitute.For<Umbraco.Cms.Infrastructure.Scoping.IScopeProvider>());
         services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Security.IBackOfficeSecurityAccessor>());
@@ -256,6 +351,18 @@ public class CompositionTests
         // A collection is a concrete class, so a real empty one stands in for the one Forms builds from its providers.
         services.AddSingleton(new Umbraco.Forms.Core.Providers.WorkflowCollection(() => []));
         // Registered Transient by Umbraco (S1): a singleton that takes it still works, but it must not be Scoped.
-        services.AddTransient(_ => Substitute.For<Microsoft.AspNetCore.Authorization.IAuthorizationService>());
+        if (realAuthorization)
+        {
+            // Forms' own handler, over a substituted helper, so a denied Forms section really denies (Task 16 fix1).
+            services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Security.Authorization.IAuthorizationHelper>());
+            services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, Umbraco.Forms.Web.Authorization.SectionAccess.SectionAccessHandler>();
+        }
+        else
+        {
+            services.AddTransient(_ => Substitute.For<Microsoft.AspNetCore.Authorization.IAuthorizationService>());
+        }
+
+        // The policy cache that AddAuthorization registers needs it; the host provides it in a running site.
+        services.AddSingleton<Microsoft.AspNetCore.Routing.EndpointDataSource>(new Microsoft.AspNetCore.Routing.CompositeEndpointDataSource([]));
     }
 }

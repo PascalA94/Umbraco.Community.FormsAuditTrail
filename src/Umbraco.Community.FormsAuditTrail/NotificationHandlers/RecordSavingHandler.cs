@@ -40,6 +40,12 @@ public sealed class RecordSavingHandler(
 
             foreach (Record record in notification.SavedEntities)
             {
+                // R54(2): the window is for the form in the route; a record of any other form is not this request's.
+                if (window.FormId is { } formId && record.Form != formId)
+                {
+                    continue;
+                }
+
                 if (window.Kind == AccessEventType.Edited)
                 {
                     HandleEdit(collector, window, record);

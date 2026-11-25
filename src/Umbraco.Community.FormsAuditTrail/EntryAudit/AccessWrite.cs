@@ -32,6 +32,12 @@ public sealed record AccessWrite(
     /// behind the first one's view, and a failed write would release a key another request holds.
     /// </summary>
     public bool SkipDedupe { get; init; }
+
+    /// <summary>
+    /// When the event happened, if that is earlier than when it is stored. A retried configuration change keeps its own
+    /// time so the off period it evidences is not shortened by the outage that delayed the write. Null means now.
+    /// </summary>
+    public DateTime? OccurredUtc { get; init; }
 }
 
 public enum AccessWriteStatus
