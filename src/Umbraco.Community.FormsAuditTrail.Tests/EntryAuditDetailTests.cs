@@ -124,6 +124,46 @@ public class EntryAuditDetailTests
         Assert.True(doc.RootElement.GetProperty("truncated").GetBoolean());
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Detail_ToJson_LastResortFallback_KeepsTheEvidenceFlags(bool flag) // @FINAL-FIX item 8 SEC-02
+    {
+        // An unshaped file name is the one large value no drop step removes, so it forces the last-resort fallback.
+        EntryAuditDetail detail = Everything() with
+        {
+            FileName = new string('f', 9000),
+            RecordIdsCaptured = flag,
+            FormUnresolved = flag,
+            UserUnresolved = flag,
+            ValuesScrubIncomplete = flag,
+            SessionExpired = flag,
+        };
+
+        string json = detail.ToJson(maxBytes: 8192);
+
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(json) <= 8192);
+        using JsonDocument doc = JsonDocument.Parse(json);
+        Assert.False(doc.RootElement.TryGetProperty("fileName", out _));
+        Assert.Equal(1, doc.RootElement.GetProperty("v").GetInt32());
+        Assert.True(doc.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("recordIdsCaptured").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("formUnresolved").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("userUnresolved").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("valuesScrubIncomplete").GetBoolean());
+        Assert.Equal(flag, doc.RootElement.GetProperty("sessionExpired").GetBoolean());
+        Assert.Equal(["v", "recordIdsCaptured", "formUnresolved", "userUnresolved", "sessionExpired", "truncated", "valuesScrubIncomplete"], doc.RootElement.EnumerateObject().Select(p => p.Name));
+    }
+
+    [Fact]
+    public void Detail_ToJson_LastResortFallback_OmitsFlagsThatWereNeverSet() // @FINAL-FIX item 8
+    {
+        string json = new EntryAuditDetail { FileName = new string('f', 9000) }.ToJson(maxBytes: 8192);
+
+        using JsonDocument doc = JsonDocument.Parse(json);
+        Assert.Equal(["v", "truncated"], doc.RootElement.EnumerateObject().Select(p => p.Name));
+    }
+
     [Fact]
     public void Detail_Shape_CapsFileNameAt260()
     {

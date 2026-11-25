@@ -3,7 +3,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// <summary>
 /// Asks Umbraco Forms which records still exist. Read-only, and it never reads record data (SEC-04).
 /// </summary>
-public interface IFormsRecordReader
+internal interface IFormsRecordReader
 {
     /// <summary>
     /// Returns the subset of <paramref name="recordIds"/> that exist in Forms. Throws on any database error and never

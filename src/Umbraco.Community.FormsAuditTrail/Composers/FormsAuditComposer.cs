@@ -72,7 +72,7 @@ public class FormsAuditComposer : IComposer
         builder.Services.AddSingleton<EntryAuditDeduplicator>();
         // Singleton: the in-memory failure state is per server and must outlive any request.
         builder.Services.AddSingleton<EntryAuditHealth>();
-        // Singleton because the singleton ConfigChangeRecorder (Task 16a) consumes it; it opens a scope per write.
+        // Singleton because the singleton ConfigChangeRecorder consumes it; it opens a scope per write.
         builder.Services.AddSingleton<IEntryAuditWriter, EntryAuditWriter>();
         // Singleton so the options-change subscription is made once. It writes the ConfigChanged row that stops a config
         // switch-off from leaving a silent gap (SEC-07); registered by factory so the publisher gets this same instance.

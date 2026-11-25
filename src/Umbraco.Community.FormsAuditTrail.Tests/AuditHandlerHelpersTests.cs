@@ -60,4 +60,27 @@ public class AuditHandlerHelpersTests
         Assert.False(AuditHandlerHelpers.TryGetCurrentUser(Accessor(null), out Guid key, out _));
         Assert.Equal(Guid.Empty, key);
     }
+    [Fact]
+    public void CurrentUserKeyOrEmpty_SignedInUser_ReturnsTheKey() // @FINAL-FIX item 4
+    {
+        Guid key = Guid.NewGuid();
+
+        Assert.Equal(key, AuditHandlerHelpers.CurrentUserKeyOrEmpty(Accessor(User(key, "Editor", "editor@example.test"))));
+    }
+
+    [Fact]
+    public void CurrentUserKeyOrEmpty_NoUser_ReturnsEmpty() // @FINAL-FIX item 4
+    {
+        Assert.Equal(Guid.Empty, AuditHandlerHelpers.CurrentUserKeyOrEmpty(Accessor(null)));
+    }
+
+    [Fact]
+    public void CurrentUserKeyOrEmpty_AccessorThrows_ReturnsEmptyInsteadOfThrowing() // @FINAL-FIX item 4
+    {
+        // The failure log line must still be written when resolving the user is what failed.
+        IBackOfficeSecurityAccessor accessor = Substitute.For<IBackOfficeSecurityAccessor>();
+        accessor.BackOfficeSecurity.Returns(_ => throw new InvalidOperationException("no scope"));
+
+        Assert.Equal(Guid.Empty, AuditHandlerHelpers.CurrentUserKeyOrEmpty(accessor));
+    }
 }

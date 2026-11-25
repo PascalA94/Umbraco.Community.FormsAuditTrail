@@ -23,7 +23,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// provider is scoped and reached through the request, never injected, so this handler holds nothing scoped (P2). It
 /// never throws, because it runs inside Forms' save.
 /// </remarks>
-public sealed class RecordSavingHandler(
+internal sealed class RecordSavingHandler(
     IEntryAuditCollectorAccessor accessor,
     IHttpContextAccessor httpContextAccessor,
     IOptionsMonitor<FormsAuditTrailOptions> options,
@@ -40,7 +40,7 @@ public sealed class RecordSavingHandler(
 
             foreach (Record record in notification.SavedEntities)
             {
-                // R54(2): the window is for the form in the route; a record of any other form is not this request's.
+                // The window is for the form in the route; a record of any other form is not this request's.
                 if (window.FormId is { } formId && record.Form != formId)
                 {
                     continue;

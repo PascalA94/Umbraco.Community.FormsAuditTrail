@@ -10,12 +10,12 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// </summary>
 public interface IUploadPathResolver
 {
-    bool IsUploadRequest(PathString path);
+    internal bool IsUploadRequest(PathString path);
 
-    Guid? ResolveFormId(PathString path);
+    internal Guid? ResolveFormId(PathString path);
 
     /// <summary>Lower-case hex SHA-256 of the normalised path below the upload root. The path itself is never stored.</summary>
-    string HashPath(PathString path);
+    internal string HashPath(PathString path);
 }
 
 /// <remarks>
@@ -24,7 +24,7 @@ public interface IUploadPathResolver
 /// contract test pins it. A site with a non-default <c>UmbracoMediaPath</c> may not be guarded by Forms at all, and the
 /// audit follows Forms: it matches the same literal and so does not see uploads served from another root (README).
 /// </remarks>
-public sealed class UploadPathResolver : IUploadPathResolver
+internal sealed class UploadPathResolver : IUploadPathResolver
 {
     internal static readonly string[] UploadRoot = ["media", "forms", "upload"];
 
@@ -83,7 +83,7 @@ public sealed class UploadPathResolver : IUploadPathResolver
 /// Matches an entry's own upload values to a <c>FileViewed</c> row, by hashing them at read time (design 7.3). It works
 /// while the record exists and stops working after erasure, which is intended.
 /// </summary>
-public static class FileViewedMatcher
+internal static class FileViewedMatcher
 {
     public static bool Matches(string filePathHash, IEnumerable<string> uploadValues, IUploadPathResolver resolver)
     {

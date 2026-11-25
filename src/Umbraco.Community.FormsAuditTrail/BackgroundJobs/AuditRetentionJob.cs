@@ -239,9 +239,12 @@ public class AuditRetentionJob : IRecurringBackgroundJob
     }
 
     // Set-based and idempotent: any change row that still holds a value although a later change of the same record and
-    // field was a clear. Rows with nothing stored are not touched, so a second run affects nothing. Batched by change
-    // id like the other steps so a backlog is never one statement or one transaction (P8); a scrubbed row stops
-    // matching, so each pass sees the next unscrubbed batch and the loop ends on the first short one.
+    // field was a clear, plus a clearing row that still holds its old value. That old value was kept while
+    // KeepClearedValues was true; once the setting is switched off, a blanked field must keep no old value (SEC-03),
+    // so rows written under the old setting are scrubbed too. Rows with nothing stored are not touched, so a second
+    // run affects nothing. Batched by change id like the other steps so a backlog is never one statement or one
+    // transaction (P8); a scrubbed row stops matching, so each pass sees the next unscrubbed batch and the loop ends
+    // on the first short one.
     internal static async Task<int> ScrubEarlierValuesOfClearedFieldsAsync(FormsAuditDbContext db, DateTime nowUtc, int batchSize = 5000)
     {
         var total = 0;
@@ -250,9 +253,10 @@ public class AuditRetentionJob : IRecurringBackgroundJob
         {
             affected = await db.EntryChanges
                 .Where(c => c.ValuesScrubbedAt == null
-                    && (c.OldValue != null || c.NewValue != null)
-                    && c.Access!.RecordId != null
-                    && db.EntryChanges.Any(n => n.Cleared && n.Id > c.Id && n.FieldId == c.FieldId && n.Access!.RecordId == c.Access!.RecordId))
+                    && ((c.Cleared && c.OldValue != null)
+                        || ((c.OldValue != null || c.NewValue != null)
+                            && c.Access!.RecordId != null
+                            && db.EntryChanges.Any(n => n.Cleared && n.Id > c.Id && n.FieldId == c.FieldId && n.Access!.RecordId == c.Access!.RecordId))))
                 .OrderBy(c => c.Id)
                 .Take(batchSize)
                 .ExecuteUpdateAsync(s => s
@@ -279,7 +283,7 @@ public class AuditRetentionJob : IRecurringBackgroundJob
         CancellationToken ct = default,
         Guid? formId = null)
     {
-        // formId narrows the pass to one form, for a permanent form delete (R63): only that form's edits are candidates
+        // formId narrows the pass to one form, for a permanent form delete: only that form's edits are candidates
         // and only they can be scrubbed, but every other safeguard, the probe included, is the same.
         IQueryable<FormEntryChange> unscrubbed = db.EntryChanges
             .Where(c => c.ValuesScrubbedAt == null && c.Access!.RecordId != null && (formId == null || c.Access!.FormId == formId));

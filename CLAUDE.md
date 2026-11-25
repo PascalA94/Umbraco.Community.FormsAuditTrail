@@ -35,6 +35,12 @@ Requires the .NET 10 SDK and Node.js 24.13+ (`src/Umbraco.Community.FormsAuditTr
 dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode   # lock files pin the Umbraco/Forms floors
 dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore
 dotnet test  src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build
+# What the PR build runs: SQL Server and Slow tests are left to release-checks.yml (Actions, Run workflow), which
+# starts SQL Server and runs both categories. Locally, SqlServer tests skip unless FORMSAUDIT_SQLSERVER is set.
+dotnet test  src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --filter "Category!=SqlServer&Category!=Slow"
+
+# Build script tests (check-vulnerable, check-trx, workflow filters)
+python3 -I -m unittest discover -s build/tests
 
 # Security gates (also run in CI)
 bash build/check-vulnerable.sh
@@ -44,6 +50,15 @@ bash build/gitleaks.sh "origin/main..HEAD"
 cd src/Umbraco.Community.FormsAuditTrail/Client
 npm ci --ignore-scripts
 npm run build        # tsc --noEmit, then vite build
+npm run lint         # ESLint, including the rule that bans unsafeHTML and innerHTML
+npm test             # Vitest
+
+# E2E (Playwright) against a running demo site. Copy .env.example to .env in the E2E folder and fill in the values:
+# E2E_BASE_URL, E2E_ADMIN_EMAIL/PASSWORD, E2E_EDITOR_EMAIL/PASSWORD, E2E_AUDITOR_EMAIL/PASSWORD, E2E_EXPECT_ACCESS_API.
+# The demo site's seeding and diagnostics are behind the E2E:Seed and E2E:Diagnostics settings, in Development only.
+cd src/Umbraco.Community.FormsAuditTrail.E2E
+npm ci --ignore-scripts
+npm test
 
 # EF Core: check for model drift on both providers (from src/Umbraco.Community.FormsAuditTrail)
 dotnet ef migrations has-pending-model-changes --context SqliteFormsAuditDbContext
@@ -98,8 +113,8 @@ Tests are in `src/Umbraco.Community.FormsAuditTrail.Tests/`, a sibling folder, b
 ## Releasing
 
 1. Check for outdated dependencies, since only security alerts are automated (Dependabot version-update PRs are deliberately off): `npm outdated` in `Client/` and `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --outdated`. Keep Umbraco floors and `Microsoft.EntityFrameworkCore.Design` where they are unless there is a reason to move them.
-2. Open a PR against `main` or `v17`. Branches are protected by rulesets and PRs are squash-merged. The required checks are `build (floor)` and `build (latest)` (.NET build and test at the floor and newest 18.x, client rebuild and `wwwroot` drift), `secrets` (gitleaks), `osv / osv-scan` and `deps` (vulnerable packages). A package or lock file change regenerates `packages.lock.json` with a plain `dotnet restore` at the floor; never commit lock files from a latest-version restore.
-3. After merging, dispatch `release-checks.yml` on the merged commit (Actions, Run workflow, choose `main` or `v17`) and wait for it to pass. It runs the SQL Server tests, which no other workflow runs, and `publish.yml` refuses to publish a commit that has no successful run of it. Then tag the merged commit `v<version>` (for example `v18.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
+2. Open a PR against `main` or `v17`. Branches are protected by rulesets. Day-to-day PRs are squash-merged. The multi-commit milestone PRs for the 18.1.0 and 17.1.0 release are rebase-merged instead, so each milestone's commits land on their own and the `v17` port can cherry-pick them one at a time. The required checks are `build (floor)` and `build (latest)` (.NET build and test at the floor and newest 18.x, client rebuild and `wwwroot` drift), `secrets` (gitleaks), `osv / osv-scan` and `deps` (vulnerable packages). A package or lock file change regenerates `packages.lock.json` with a plain `dotnet restore` at the floor; never commit lock files from a latest-version restore.
+3. After merging, dispatch `release-checks.yml` on the merged commit (Actions, Run workflow, choose `main` or `v17`) and wait for it to pass. It runs the SQL Server and Slow tests, which no other workflow runs, and `publish.yml` refuses to publish a commit that has no successful run of it. Then tag the merged commit `v<version>` (for example `v18.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
 4. Create a GitHub release: `gh release create v<version> --generate-notes`.
 5. GitHub Actions are pinned to full commit SHAs, and `publish.yml` runs in the protected `nuget` environment. Keep both.
 6. The Umbraco Marketplace syncs from NuGet about every 2 hours. `umbraco-marketplace.json` is read from the root of `main`.

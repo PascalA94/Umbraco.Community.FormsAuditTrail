@@ -1,10 +1,6 @@
 import {
-  ACCESS_API_MISSING,
-  DELETES_MISSING,
   accessDetail,
   accessRows,
-  expectCaptureOn,
-  hasAccessApi,
   lastAccessId,
   rowsSince,
   scan,
@@ -16,28 +12,21 @@ import { AUDIT, FORMS, createRecord, listRecords, submitPublicEntry, updateRecor
 const run = Date.now().toString(36);
 
 test.describe.serial('entry access capture', () => {
-  let accessApi = false;
-
-  test.beforeAll(async ({ admin }) => {
-    accessApi = await hasAccessApi(admin);
-  });
 
   test('opening the entries list is recorded as ListViewed', async ({ admin, contactForm }) => {
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
     const rows = await listRecords(admin, contactForm);
     expect(rows.length).toBeGreaterThanOrEqual(3);
 
-    test.fixme(!accessApi, ACCESS_API_MISSING);
     expect(await rowsSince(admin, before, 'ListViewed', contactForm.id)).toHaveLength(1);
   });
 
   test('opening an entry is recorded as DetailViewed with its record id', async ({ admin, contactForm }) => {
     const [first] = await listRecords(admin, contactForm);
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
     const response = await admin.get(`${FORMS}/form/${contactForm.id}/record/${first.uniqueId}/audit-trail`);
     expect(response.status()).toBe(200);
 
-    test.fixme(!accessApi, ACCESS_API_MISSING);
     const written = await rowsSince(admin, before, 'DetailViewed', contactForm.id);
     expect(written).toHaveLength(1);
     expect(written[0].recordId?.toLowerCase()).toBe(first.uniqueId.toLowerCase());
@@ -48,7 +37,7 @@ test.describe.serial('entry access capture', () => {
     const editedEmail = `edited.${run}@example.test`;
     const id = await createRecord(admin, contactForm, { name: [`Edit Target ${run}`], email: [email] });
     const row = (await listRecords(admin, contactForm)).find((r) => r.uniqueId.toLowerCase() === id.toLowerCase())!;
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
 
     const response = await updateRecord(admin, contactForm, row, { name: [`Edited Name ${run}`], email: [editedEmail] });
     expect(response.status()).toBe(200);
@@ -59,7 +48,6 @@ test.describe.serial('entry access capture', () => {
     expect(await scan(admin, email)).toEqual([]);
     expect(await scan(admin, editedEmail)).toEqual([]);
 
-    test.fixme(!accessApi, ACCESS_API_MISSING);
     const written = await rowsSince(admin, before, 'Edited', contactForm.id);
     expect(written).toHaveLength(1);
     const detail = await accessDetail(admin, written[0].id);
@@ -72,7 +60,7 @@ test.describe.serial('entry access capture', () => {
     const types = await admin.json<{ id: string; name: string }[]>(await admin.get(`${FORMS}/export/types`, { formId: contactForm.id }));
     const csv = types.find((t) => /csv/i.test(t.name));
     expect(csv, 'a CSV exporter').toBeTruthy();
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
 
     const generated = await admin.post(`${FORMS}/export`, undefined, { formId: contactForm.id, exportType: csv!.id });
     expect(generated.status()).toBe(200);
@@ -81,7 +69,6 @@ test.describe.serial('entry access capture', () => {
     expect(download.status()).toBe(200);
     expect((await download.body()).length).toBeGreaterThan(0);
 
-    test.fixme(!accessApi, ACCESS_API_MISSING);
     const exported = await rowsSince(admin, before, 'Exported', contactForm.id);
     const downloaded = await rowsSince(admin, before, 'ExportDownloaded', contactForm.id);
     expect(exported).toHaveLength(1);
@@ -94,17 +81,16 @@ test.describe.serial('entry access capture', () => {
     const jane = (await listRecords(admin, contactForm)).find((r) => valuesOf(r, contactForm, 'name')[0] === 'Jane Smith')!;
     const [path] = valuesOf(jane, contactForm, 'cv');
     expect(path, 'the seeded CV path').toContain('Jane_Smith_CV.pdf');
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
 
     const response = await admin.getWithCookiesOnly(path);
     expect(response.status()).toBe(200);
 
-    // Positive control: the FileViewed row stores only a hash of the path.
-    expect((await scan(admin, 'filePathHash')).length, 'the file view was captured').toBeGreaterThan(0);
+    // Positive control tied to this action: the one FileViewed row this request wrote, which stores only a path hash.
+    const viewed = await rowsSince(admin, before, 'FileViewed', contactForm.id);
+    expect(viewed, 'this file view was captured').toHaveLength(1);
+    expect(viewed[0].detail ?? '').toContain('filePathHash');
     expect(await scan(admin, 'Jane_Smith')).toEqual([]);
-
-    test.fixme(!accessApi, ACCESS_API_MISSING);
-    expect(await rowsSince(admin, before, 'FileViewed', contactForm.id)).toHaveLength(1);
     const everything = JSON.stringify(await accessRows(admin));
     expect(everything).not.toContain('Jane_Smith');
   });
@@ -116,28 +102,24 @@ test.describe.serial('entry access capture', () => {
     expect(trail.status()).toBe(200);
     const [executed] = await admin.json<{ workflowKey: string }[]>(trail);
     expect(executed, 'the public submission ran the form workflow').toBeTruthy();
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
 
     const retry = await admin.post(`${FORMS}/form/${contactForm.id}/record/${row.uniqueId}/workflow/${executed.workflowKey}/retry`);
     expect(retry.status()).toBe(200);
 
-    test.fixme(!accessApi, ACCESS_API_MISSING);
     expect(await rowsSince(admin, before, 'WorkflowRetried', contactForm.id)).toHaveLength(1);
   });
 
   test('creating an entry through the backoffice token path leaves no value in the audit tables (T3, P4)', async ({ admin, contactForm }) => {
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
     const marker = `Created-${run}`;
     const id = await createRecord(admin, contactForm, { name: [marker], email: [`${marker}@example.test`] });
     expect(id).toBeTruthy();
 
-    // Positive control: the Created row stores field captions, so this fails if capture is off.
-    expect((await scan(admin, 'fieldCaptions')).length, 'the create was captured').toBeGreaterThan(0);
-    expect(await scan(admin, marker)).toEqual([]);
-
-    test.fixme(!accessApi, ACCESS_API_MISSING);
+    // Positive control tied to this create: the Created row for this record id exists before any absence is asserted.
     const written = await rowsSince(admin, before, 'Created', contactForm.id);
-    expect(written).toHaveLength(1);
+    expect(written, 'this create was captured').toHaveLength(1);
+    expect(await scan(admin, marker)).toEqual([]);
     expect(written[0].recordId?.toLowerCase()).toBe(id.toLowerCase());
     // Field captions only (design 7.7): the detail names the fields filled in and holds none of their values.
     expect(written[0].detail ?? '').toContain('Name');
@@ -148,16 +130,16 @@ test.describe.serial('entry access capture', () => {
     const marker = `Cleared-${run}`;
     const id = await createRecord(admin, contactForm, { name: [marker], email: [`${marker}@example.test`] });
     const row = (await listRecords(admin, contactForm)).find((r) => r.uniqueId.toLowerCase() === id.toLowerCase())!;
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
 
     const response = await updateRecord(admin, contactForm, row, { name: [] });
     expect(response.status()).toBe(200);
 
-    await expectCaptureOn(admin);
+    // Positive control tied to this edit: its own Edited row exists before the old value is scanned for.
+    const written = await rowsSince(admin, before, 'Edited', contactForm.id);
+    expect(written, 'this blanking was captured').toHaveLength(1);
+    const [edited] = written;
     expect(await scan(admin, marker)).toEqual([]);
-
-    test.fixme(!accessApi, ACCESS_API_MISSING);
-    const [edited] = await rowsSince(admin, before, 'Edited', contactForm.id);
     const detail = await accessDetail(admin, edited.id);
     const name = detail.changes.find((c) => c.fieldCaption === 'Name')!;
     expect(name.cleared).toBe(true);
@@ -167,22 +149,25 @@ test.describe.serial('entry access capture', () => {
   test('a field caption holding markup is returned as plain text (S3)', async ({ admin, contactForm }) => {
     const id = await createRecord(admin, contactForm, { name: [`Markup ${run}`], notes: ['before'] });
     const row = (await listRecords(admin, contactForm)).find((r) => r.uniqueId.toLowerCase() === id.toLowerCase())!;
-    const before = accessApi ? await lastAccessId(admin) : 0;
+    const before = await lastAccessId(admin);
     expect((await updateRecord(admin, contactForm, row, { notes: ['after'] })).status()).toBe(200);
 
-    test.fixme(!accessApi, ACCESS_API_MISSING);
-    const [edited] = await rowsSince(admin, before, 'Edited', contactForm.id);
-    const detail = await accessDetail(admin, edited.id);
+    const written = await rowsSince(admin, before, 'Edited', contactForm.id);
+    expect(written, 'this edit was captured').toHaveLength(1);
+    const detail = await accessDetail(admin, written[0].id);
     // The API hands the caption back verbatim as data; the dashboard test below proves it is rendered as text.
     expect(detail.changes.map((c) => c.fieldCaption)).toContain('<img src=x onerror="window.__x=1">');
   });
 
   test('a bulk delete of two entries writes one Deleted row, finds each entry in its history and scrubs its edits', async ({ admin, contactForm }) => {
-    test.fixme(true, DELETES_MISSING);
     const a = await createRecord(admin, contactForm, { name: [`Delete A ${run}`], email: [`delete.a.${run}@example.test`] });
     const b = await createRecord(admin, contactForm, { name: [`Delete B ${run}`], email: [`delete.b.${run}@example.test`] });
     const rowA = (await listRecords(admin, contactForm)).find((r) => r.uniqueId.toLowerCase() === a.toLowerCase())!;
-    await updateRecord(admin, contactForm, rowA, { name: [`Delete A edited ${run}`] });
+    expect((await updateRecord(admin, contactForm, rowA, { name: [`Delete A edited ${run}`] })).status()).toBe(200);
+    // Positive control: the edit's values are still held before the delete, so the scrub below is the delete's doing.
+    const heldRows = (await accessRows(admin, { recordId: a })).filter((r) => r.eventType === 'Edited');
+    expect(heldRows, 'the edit of entry A was captured').toHaveLength(1);
+    expect((await accessDetail(admin, heldRows[0].id)).changes.some((c) => c.valuesScrubbedAt === null)).toBe(true);
     const before = await lastAccessId(admin);
 
     const actions = await admin.json<{ id: string; name: string }[]>(await admin.get(`${FORMS}/record-set-actions`));

@@ -28,7 +28,7 @@ using Umbraco.Forms.Core.Services;
 
 namespace Umbraco.Community.FormsAuditTrail.Controllers;
 
-/// <summary>The filters of the access-log list, shared with the CSV export (Task 16b) so the two cannot drift.</summary>
+/// <summary>The filters of the access-log list, shared with the CSV export so the two cannot drift.</summary>
 internal sealed record AccessFilter(
     Guid? FormId = null,
     Guid? UserKey = null,
@@ -144,7 +144,7 @@ public class FormsAuditAccessApiController(
     /// <summary>
     /// Streams the rows the current user may see as CSV (SEC-10). The audit row is written before the first byte, so an
     /// export that is cancelled half-way still leaves a trace. Under the opt-in <c>FailClosedOnExport</c> a row that
-    /// cannot be written refuses the export with a 503 before any byte is sent (E5, ruling R56); by default a failed
+    /// cannot be written refuses the export with a 503 before any byte is sent (E5); by default a failed
     /// write is logged and the export proceeds (E12). At most one export per user runs at a time (429 otherwise).
     /// </summary>
     [HttpGet("export")]
@@ -565,7 +565,7 @@ public class FormsAuditAccessApiController(
         return new AccessRowScope(allForms, allForms && accessible.Count == logged.Count ? null : accessible);
     }
 
-    /// <summary>The rows the current user may see, with the list filters applied. Reused by the CSV export (Task 16b).</summary>
+    /// <summary>The rows the current user may see, with the list filters applied. Reused by the CSV export so the list and the file cannot drift.</summary>
     internal IQueryable<FormAccessEntry> VisibleRows(AccessRowScope scope, AccessFilter filter)
     {
         IQueryable<FormAccessEntry> query = db.AccessEntries.AsNoTracking();

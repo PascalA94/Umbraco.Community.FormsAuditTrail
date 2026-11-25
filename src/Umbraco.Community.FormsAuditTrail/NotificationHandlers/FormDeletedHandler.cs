@@ -20,7 +20,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// connection does not contend with it (see <see cref="FormDeletingHandler"/>). Then, as separate steps
 /// so neither can cost the definition entry, it scrubs the stored edit values of the form's entries that
 /// Forms no longer holds and writes one entry-access <c>Deleted</c> row with <c>deleteKind: "form"</c>
-/// (design 7.x, Task 14, R63).
+/// (spec 7.3, form permanent delete).
 /// </summary>
 /// <remarks>
 /// Forms 18.2.2 and 18.3.1 publish this only for a permanent delete (an IL check found it reached from
@@ -108,7 +108,7 @@ public class FormDeletedHandler : INotificationAsyncHandler<FormDeletedNotificat
 
     /// <summary>
     /// The erasure scrub for the deleted form's entries, through the same path as the daily reconciliation limited to
-    /// this form (R63): only values of records Forms no longer holds are scrubbed, checked by <c>UniqueId</c> alone
+    /// this form: only values of records Forms no longer holds are scrubbed, checked by <c>UniqueId</c> alone
     /// (SEC-04), with the same probe self-test, so a reader that cannot match ids scrubs nothing. Not gated on entry
     /// capture being on: values stored while it was on are still personal data once their entries are gone. Never
     /// throws; a failure is left to the daily reconciliation.
@@ -180,7 +180,7 @@ public class FormDeletedHandler : INotificationAsyncHandler<FormDeletedNotificat
     }
 
     /// <summary>
-    /// Who deleted the form, for the entry-access row (R63, SEC-L5). The user saved while deleting comes first; then the
+    /// Who deleted the form, for the entry-access row (SEC-L5). The user saved while deleting comes first; then the
     /// current backoffice user, resolved per call (P2); then, inside a request, "Unknown" flagged <c>userUnresolved</c>.
     /// "System" is kept for deletes with no HTTP context at all (code, jobs), so a request is never passed off as one.
     /// </summary>

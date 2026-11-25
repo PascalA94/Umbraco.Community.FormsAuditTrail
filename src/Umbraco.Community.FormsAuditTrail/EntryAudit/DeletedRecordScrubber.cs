@@ -17,7 +17,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// scrubs them within 24 hours. <see cref="CancellationToken.None"/> throughout, so a client that drops the connection
 /// cannot cancel an erasure.
 /// </remarks>
-public sealed class DeletedRecordScrubber(
+internal sealed class DeletedRecordScrubber(
     IServiceScopeFactory scopeFactory,
     TimeProvider time,
     ILogger<DeletedRecordScrubber> logger)

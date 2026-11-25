@@ -67,7 +67,7 @@ export interface AuditConfigDto {
   // null means "not checked", which is different from false ("none found"); see foreignHandlersText.
   foreignValueHandlers?: boolean | null;
   offPeriods?: OffPeriodDto[] | null;
-  // The server sends the enum name (R50) and only to access-log readers; absent reads as "notice not applicable".
+  // The server sends the enum name and only to access-log readers; absent reads as "notice not applicable".
   // A number is still accepted so an older server cannot turn the notice on by mistake.
   storeEditValues?: string | number | null;
 }

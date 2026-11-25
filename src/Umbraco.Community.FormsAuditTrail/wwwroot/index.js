@@ -1372,7 +1372,6 @@ let v = class extends D {
               id=${`tab-${i}`}
               label=${J[i]}
               ?active=${i === t}
-              aria-controls=${`panel-${i}`}
               @click=${() => this._activeTab = i}
               >${J[i]}</uui-tab
             >

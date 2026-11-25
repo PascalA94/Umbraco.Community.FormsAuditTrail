@@ -33,7 +33,7 @@ namespace Umbraco.Community.FormsAuditTrail.EntryAudit;
 /// </list>
 /// Each server records its own configuration, hence the machine name in the snapshot key.
 /// </remarks>
-public sealed class ConfigChangeRecorder : INotificationAsyncHandler<UmbracoApplicationStartedNotification>, IDisposable
+internal sealed class ConfigChangeRecorder : INotificationAsyncHandler<UmbracoApplicationStartedNotification>, IDisposable
 {
     internal const string SnapshotKey = "config.snapshot";
     internal const int MaxValueLength = 200;

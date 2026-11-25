@@ -20,12 +20,12 @@ const noticeKey = (userKey: string) => `formsAuditTrail.gdprNotice.${userKey}`;
 
 function storeEditValuesIsNone(cfg: AuditConfigDto): boolean {
   const v = cfg.storeEditValues;
-  if (v === undefined || v === null) return true; // not on the DTO yet: the notice does not apply (R50)
+  if (v === undefined || v === null) return true; // not on the DTO yet: the notice does not apply
   return v === 0 || (typeof v === 'string' && v.toLowerCase() === 'none');
 }
 
 /**
- * R42 and R50: only meaningful while edit values are stored. "Not checked" (detector has not run) is shown as such and
+ * Only meaningful while edit values are stored. "Not checked" (detector has not run) is shown as such and
  * never as "none found".
  */
 export function foreignNotice(cfg: AuditConfigDto): string | null {

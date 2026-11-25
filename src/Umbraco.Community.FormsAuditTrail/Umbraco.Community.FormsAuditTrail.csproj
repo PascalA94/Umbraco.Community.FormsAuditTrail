@@ -16,9 +16,9 @@
 
   <PropertyGroup>
     <PackageId>Umbraco.Community.FormsAuditTrail</PackageId>
-    <Version>18.0.5</Version>
+    <Version>18.1.0-beta.1</Version>
     <Authors>Pascal Meyer</Authors>
-    <Description>A view-only audit trail for Umbraco Forms design changes. Tracks who changed what on form designs (fields, pages, workflows and form settings) and surfaces the history in a backoffice dashboard with filtering, field-level diffs and CSV export.</Description>
+    <Description>A view-only audit trail for Umbraco Forms. Records who changed what on form designs (fields, pages, workflows and form settings), and who viewed, searched, exported, downloaded, edited or deleted form entries, with field-level edit history and delete capture. The history is shown in backoffice dashboards with filtering, diffs and CSV export, and the entry access log is limited to named user groups.</Description>
     <Copyright>Copyright © Pascal Meyer</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -26,7 +26,7 @@
     <PackageProjectUrl>https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail</PackageProjectUrl>
     <RepositoryUrl>https://github.com/PascalA94/Umbraco.Community.FormsAuditTrail</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>umbraco;umbraco-marketplace;umbraco-forms;forms;audit;audit-trail;change-tracking;backoffice;plugin;package</PackageTags>
+    <PackageTags>umbraco;umbraco-marketplace;umbraco-forms;forms;audit;audit-trail;change-tracking;backoffice;plugin;package;gdpr;compliance;entries;umbraco-forms-entries</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
@@ -81,6 +81,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Umbraco.Community.FormsAuditTrail.Tests" />
+    <!-- NSubstitute's proxies are emitted into this dynamic assembly. The capture pipeline's services are internal so
+         they are not public API, and the tests still need to substitute them. Internals are not a security boundary
+         in .NET, so this grants nothing that reflection does not already allow. -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
 </Project>

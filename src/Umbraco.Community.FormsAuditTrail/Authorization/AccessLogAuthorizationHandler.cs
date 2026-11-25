@@ -18,7 +18,7 @@ namespace Umbraco.Community.FormsAuditTrail.Authorization;
 /// user comes from the context's own principal, not <c>IBackOfficeSecurityAccessor</c>, so nothing ambient is held (P2).
 /// Adapted from UserActivity <c>Security/UserActivityAuthorizationHandler.cs</c>.
 /// </remarks>
-public sealed class AccessLogAuthorizationHandler(
+internal sealed class AccessLogAuthorizationHandler(
     IUserService userService,
     IOptionsMonitor<FormsAuditTrailOptions> options,
     ILogger<AccessLogAuthorizationHandler> logger)
