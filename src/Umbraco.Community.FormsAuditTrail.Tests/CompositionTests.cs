@@ -217,7 +217,14 @@ public class CompositionTests
             Assert.Equal([OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme], policy.AuthenticationSchemes);
             Assert.DoesNotContain(Umbraco.Cms.Core.Constants.Security.BackOfficeAuthenticationType, policy.AuthenticationSchemes);
             Assert.Contains(policy.Requirements, r => r is Microsoft.AspNetCore.Authorization.Infrastructure.DenyAnonymousAuthorizationRequirement);
+#if UMBRACO_17
+            // Forms 17's section policy is a claim check, which the access-log policy repeats.
+            Assert.Contains(policy.Requirements, r => r is Microsoft.AspNetCore.Authorization.Infrastructure.ClaimsAuthorizationRequirement c
+                && c.ClaimType == "http://umbraco.org/2015/02/identity/claims/backoffice/allowedapp"
+                && c.AllowedValues is not null && c.AllowedValues.Contains("forms"));
+#else
             Assert.Contains(policy.Requirements, r => r is Umbraco.Forms.Web.Authorization.SectionAccess.SectionAccessRequirement s && s.SectionAliases.Contains("forms"));
+#endif
             Assert.Contains(policy.Requirements, r => r is Authorization.AccessLogRequirement);
         }
     }
@@ -232,7 +239,8 @@ public class CompositionTests
         using (provider)
         {
             // Only the Umbraco boundary is substituted: the user service and the helper that turns the principal into a
-            // user. Forms' real section handler, the policy, the real IAuthorizationService and our handler are composed.
+            // user. The Forms section check (18: Forms' real section handler; 17: the allowedapp claim Forms 17's policy
+            // requires), the policy, the real IAuthorizationService and our handler are composed.
             var key = Guid.NewGuid();
             var groupSub = Substitute.For<Umbraco.Cms.Core.Models.Membership.IReadOnlyUserGroup>();
             groupSub.Alias.Returns(group);
@@ -250,8 +258,16 @@ public class CompositionTests
                 });
             helper.GetUmbracoUser(Arg.Any<System.Security.Principal.IPrincipal>()).Returns(user);
 
+            // The token carries one allowedapp claim per allowed section, as Umbraco issues it. Forms 17's check reads it;
+            // Forms 18's section handler reads the user's sections instead and ignores the claim.
+            var claims = new List<System.Security.Claims.Claim> { new("sub", key.ToString()) };
+            if (formsSection)
+            {
+                claims.Add(new("http://umbraco.org/2015/02/identity/claims/backoffice/allowedapp", "forms"));
+            }
+
             var principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
-                [new System.Security.Claims.Claim("sub", key.ToString())], Umbraco.Cms.Core.Constants.Security.BackOfficeAuthenticationType));
+                claims, Umbraco.Cms.Core.Constants.Security.BackOfficeAuthenticationType));
 
             using IServiceScope scope = provider.CreateScope();
             var authorization = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
@@ -354,9 +370,12 @@ public class CompositionTests
         // Registered Transient by Umbraco (S1): a singleton that takes it still works, but it must not be Scoped.
         if (realAuthorization)
         {
-            // Forms' own handler, over a substituted helper, so a denied Forms section really denies (Task 16 fix1).
+            // A substituted helper that turns the principal into a user. On 18, Forms' own section handler over it, so a
+            // denied Forms section really denies (Task 16 fix1); Forms 17 has no section handler, its check is a claim.
             services.AddSingleton(Substitute.For<Umbraco.Cms.Core.Security.Authorization.IAuthorizationHelper>());
+#if !UMBRACO_17
             services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, Umbraco.Forms.Web.Authorization.SectionAccess.SectionAccessHandler>();
+#endif
         }
         else
         {

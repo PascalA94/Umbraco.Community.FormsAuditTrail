@@ -24,7 +24,8 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 /// </summary>
 /// <remarks>
 /// Forms 18.2.2 and 18.3.1 publish this only for a permanent delete (an IL check found it reached from
-/// <c>PermanentDelete</c> and the folder cascade, never from <c>Trash</c>). Forms publishes no per-record
+/// <c>PermanentDelete</c> and the folder cascade, never from <c>Trash</c>; the 17.x line is checked by the E2E
+/// delete specs). Forms publishes no per-record
 /// <c>RecordDeleted</c> on this path (S5), so the form's candidates are checked against <c>UFRecords</c>
 /// rather than trusted: values are scrubbed only for records that are really gone.
 /// </remarks>

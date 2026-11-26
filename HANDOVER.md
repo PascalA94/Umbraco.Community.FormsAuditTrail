@@ -1,3 +1,26 @@
+# Handover: one branch for Umbraco 17 and 18 (2026-11-26)
+
+Branch `chore/single-branch-lines`, off `main` at `9839cdd`. Nothing is committed: the "Milestone commit" block at the end of `COMMITS-TODO.md` shows how. The reasoning is decision D11 in `docs/design.md`.
+
+## What changed
+
+- `main` now builds both lines. `UmbracoMajor` (17 or 18, default 18) in `Directory.Build.props` selects the CMS and Forms ranges, the package version and the `UMBRACO_17` / `UMBRACO_18` constant. Each line has its own `packages.<line>.lock.json`, `obj/<line>` and `bin/<line>`. `eng/lines.txt` lists the lines.
+- The only code difference is the Forms section check in `AccessLogPolicy`: Forms 18 has `SectionAccessRequirement`, Forms 17 checks the `allowedapp` claim. Line 17 also references `Umbraco.Cms.Api.Management` to lift a vulnerable `Microsoft.OpenApi` (GHSA-v5pm-xwqc-g5wc).
+- One client bundle, built against `@umbraco-cms/backoffice` ^17.8.0. CI type-checks it against ^18.3.0 too. The client version files stay `0.0.0`. `build/pack.sh` writes the line's version into the packed manifest.
+- Versions move in step. One tag `release/<minor>.<patch>[-suffix]` packs both lines. The next release is `release/1.3`, which gives 17.1.3 and 18.1.3. 17.1.1 and 17.1.2 are never released.
+- `v17` is frozen at 17.1.0 and gets no more work. Item M6 (the v17 port) in the older handover below is superseded: the 17 line now ships from `main`.
+
+## Repository settings Pascal must change before the first release/* tag
+
+These are GitHub settings. Nothing in the repository can change them.
+
+1. Environment `nuget`, deployment tags: allow `release/*`. Today only `v*` is allowed, so publish.yml would be refused.
+2. The tag ruleset targets `refs/tags/v*`. Point it at `refs/tags/release/*`, or add that pattern to it.
+3. Required status checks on `main`: remove `build (floor)`, `build (latest)` and `deps`. Add `build (17 floor)`, `build (17 latest)`, `build (18 floor)`, `build (18 latest)`, `client`, `deps (17)` and `deps (18)`. Keep `secrets` and `osv / osv-scan`.
+4. Optional: drop `v17` from any branch protection once you are happy it can be deleted.
+
+---
+
 # Handover: entry access audit (FormsAuditTrail 18.1.0-beta.1 work)
 
 Written for Pascal, 2026-11-24, at the end of the run. Branch `fc/m1-schema`. Nothing is committed (the hook blocks it). Each milestone end state is saved as a git tree object, and `COMMITS-TODO.md` shows how to turn them into commits.

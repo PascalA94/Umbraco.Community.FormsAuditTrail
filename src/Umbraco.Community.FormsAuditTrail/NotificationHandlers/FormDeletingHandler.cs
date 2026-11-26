@@ -9,7 +9,7 @@ namespace Umbraco.Community.FormsAuditTrail.NotificationHandlers;
 
 /// <summary>
 /// Captures the before-state and acting user into the notification state. It never writes to the
-/// audit database: Forms 18.2 deletes workflows and security rows inside the outer scope before this
+/// audit database: Forms 17.6+ and 18.2+ delete workflows and security rows inside the outer scope before this
 /// notification fires, and a second connection writing on SQLite then fails with "table is locked".
 /// <see cref="FormDeletedHandler"/> writes the entry once that scope has completed.
 /// </summary>

@@ -86,16 +86,16 @@ They work side by side. Use Forms' history to roll a form back, and this package
 
 ## Compatibility
 
-| Package version | Branch | Umbraco CMS | Umbraco Forms | .NET | Database |
-|---|---|---|---|---|---|
-| 18.1.0 and later | `main` | 18.3.0+ | 18.2.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
-| 17.1.0 and later | `v17` | 17.8.0+ | 17.6.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| Package version | Umbraco CMS | Umbraco Forms | .NET | Database |
+|---|---|---|---|---|
+| 18.1.0 and later | 18.3.0+ | 18.2.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
+| 17.1.0 and later | 17.8.0+ | 17.6.2+ | 10 | SQLite and SQL Server (including Umbraco Cloud) |
 
 The entry access audit is part of 18.1.0 and 17.1.0 and later. Earlier 17.0.x releases (Umbraco 17.7+, Forms 17.5.2+) carry the design audit only.
 
 ### Versioning
 
-The package's major version matches the Umbraco major it targets. `18.x` is for Umbraco 18 and is developed on `main`. `17.x` is for Umbraco 17 and is maintained on the `v17` branch, which still receives fixes.
+The package's major version matches the Umbraco major it targets: `18.x` is for Umbraco 18 and `17.x` is for Umbraco 17. Both are built from the same code on `main` and released together, so from 17.1.3 and 18.1.3 on, each release ships the same minor and patch for both lines and Umbraco 17 keeps getting every fix. 17.1.1 and 17.1.2 were never released.
 
 The first release, `1.0.0`, targeted Umbraco 17 before this scheme existed. It is deprecated on NuGet, so Umbraco 17 sites should use `17.x` instead.
 

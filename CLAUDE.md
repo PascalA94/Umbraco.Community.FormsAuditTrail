@@ -6,24 +6,28 @@ Guidance for Claude Code (and other contributors) working in this repository.
 
 `Umbraco.Community.FormsAuditTrail` is a NuGet package with two view-only audit trails, shown in one backoffice dashboard (the **Audit** tab, with sub-tabs Form changes, Entry access and Entry history):
 
-- **Entry access audit** (18.1.0 and later): who viewed, opened, edited, deleted and exported Forms entries in the backoffice, and who opened uploaded files. It is personal data about staff, and on by default.
+- **Entry access audit** (18.1.0 and 17.1.0 and later): who viewed, opened, edited, deleted and exported Forms entries in the backoffice, and who opened uploaded files. It is personal data about staff, and on by default.
 - **Form design audit**: changes to fields, pages, workflows and form settings, with field-level diffs and CSV export.
 
 Front-end submissions are not audited.
 
-## Branches and versioning
+## Lines and versions
 
-The package major version matches the Umbraco major it targets. Each line lives on its own branch:
+The package major version matches the Umbraco major it targets. **One branch, two lines**: `main` builds both, and there is no `v17` branch any more (it was retired on 2026-11-25; see `docs/design.md`, section 4).
 
-| Branch | Package | Umbraco CMS | Umbraco Forms | backoffice npm |
+| `UmbracoMajor` | Package | Umbraco CMS | Umbraco Forms | Define |
 |---|---|---|---|---|
-| `main` | 18.x | `[18.3.0, 19.0.0)` | `[18.2.2, 19.0.0)` | `^18.3.0` |
-| `v17` | 17.x | `[17.7.0, 18.0.0)` | `[17.5.2, 18.0.0)` | `^17.7.0` |
+| `18` (default) | 18.x | `[18.3.0, 19.0.0)` | `[18.2.2, 19.0.0)` | `UMBRACO_18` |
+| `17` | 17.x | `[17.8.0, 18.0.0)` | `[17.6.2, 18.0.0)` | `UMBRACO_17` |
 
-- **This branch is `main` (Umbraco 18).** Fixes that apply to both lines must be made on both branches; do not merge `main` into `v17`.
+- `UmbracoMajor` (`17` or `18`, default `18`, set as a property `-p:UmbracoMajor=17` or as an environment variable) picks the CMS and Forms ranges, the package version, the `UMBRACO_17` / `UMBRACO_18` constant, and its own `packages.<line>.lock.json`, `obj/<line>` and `bin/<line>`. `eng/lines.txt` lists the lines; `bash build/test.sh` restores, builds and tests every line (`bash build/test.sh 17` for one).
+- Code for one line only sits behind `#if UMBRACO_17` (with the 18 code in `#else`). Today that is only the Forms section check in `Authorization/AccessLogPolicy.cs` (Forms 17 checks an `allowedapp` claim, Forms 18 has a section requirement and handler) and the matching test set-up in `AccessLogPolicyForbidTests` and `CompositionTests`. The 17 line also references `Umbraco.Cms.Api.Management` (a conditional `ItemGroup` in the csproj) so Forms 17's Swashbuckle cannot pull a vulnerable `Microsoft.OpenApi` (GHSA-v5pm-xwqc-g5wc).
+- **One client bundle serves both lines.** `@umbraco-cms/backoffice` is a Vite external, the committed `wwwroot/` is built against `^17.8.0` (the lower line), and CI type-checks the source against `^18.3.0` too. Split it only if a line ever needs different client code.
+- **Versions move together.** The version is `<UmbracoMajor>.<PackageMinor>.<PackagePatch>[-<PackageVersionSuffix>]` from `Directory.Build.props`, and one tag `release/<minor>.<patch>[-suffix]` packs both lines from one commit (`release/1.3` gives 17.1.3 and 18.1.3). 17.x has no patch history of its own any more: a 17-only fix still ships both packages. The first shared release is `release/1.3`; 17.1.1 and 17.1.2 are skipped.
+- The client version files (`Client/package.json`, `Client/package-lock.json`, `Client/public/umbraco-package.json`, `wwwroot/umbraco-package.json`) stay at `0.0.0` in git. `build/pack.sh` stamps each line's version into the packed `wwwroot/umbraco-package.json` (the version the backoffice shows) and puts the file back afterwards.
+- EF migrations are one set per provider, shared by both lines.
 - Umbraco and EF Core references are **range floors**. Raising a floor forces every consuming site to upgrade, so only raise one when there is a concrete reason (a required API, a security fix) and say why in the PR.
-- A version bump touches four files, which must stay in step: the `<Version>` in `Umbraco.Community.FormsAuditTrail.csproj`, `Client/package.json`, `Client/package-lock.json` (run `npm install --package-lock-only`) and `Client/public/umbraco-package.json` (the version shown in the backoffice). Then rebuild the client.
-- A 17.x release also updates the pinned Umbraco 17 install command (`--version 17.x.y`) in `README.md` on **both** branches: `main`'s README is what GitHub shows, and each branch's README ships on its own NuGet versions.
+- A version bump changes `PackageMinor`, `PackagePatch` and `PackageVersionSuffix` in `Directory.Build.props` (both lines move together); `build/check-release-version.sh` checks them against the tag. Each release also updates the pinned Umbraco 17 install command (`--version 17.x.y`) in `README.md`.
 - NuGet audit runs in `all` mode, so transitive advisories reached through the Umbraco floors fail loudly. Fix one by adding an explicit `PackageReference` minimum in the package project (see the security minimums `ItemGroup`), or raise an Umbraco floor if that is what pulls a patched version in. `NuGetAuditMode` is `all` in the csproj and the pins for `System.Security.Cryptography.Pkcs` and `MessagePack` stay: removing either is a deliberate change with its own PR, never a tidy-up. Still run `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --vulnerable --include-transitive` before a release.
 
 ## Commands
@@ -31,8 +35,11 @@ The package major version matches the Umbraco major it targets. Each line lives 
 Requires the .NET 10 SDK and Node.js 24.13+ (`src/Umbraco.Community.FormsAuditTrail/Client/.nvmrc`).
 
 ```bash
-# Backend
-dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode   # lock files pin the Umbraco/Forms floors
+# Every line (17 and 18): restore, build and test, SQL Server and Slow excluded
+bash build/test.sh
+
+# Backend, one line. Add -p:UmbracoMajor=17 to every command for the 17 line (18 is the default), or export UmbracoMajor=17.
+dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode   # packages.<line>.lock.json pin the floors
 dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore
 dotnet test  src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build
 # What the PR build runs: SQL Server and Slow tests are left to release-checks.yml (Actions, Run workflow), which
@@ -42,8 +49,12 @@ dotnet test  src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --
 # Build script tests (check-vulnerable, check-trx, workflow filters)
 python3 -I -m unittest discover -s build/tests
 
-# Security gates (also run in CI)
-bash build/check-vulnerable.sh
+# Latest leg (newest <line>.x, unlocked restore; never commit the lock files it rewrites)
+dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx -p:UmbracoMajor=17 '-p:UmbracoTestVersion=17.*' '-p:FormsTestVersion=17.*' '-p:UmbracoDemoVersion=17.*' '-p:FormsDemoVersion=17.*' --force-evaluate -p:RestoreLockedMode=false
+
+# Security gates (also run in CI), once per line after that line's restore
+UmbracoMajor=17 bash build/check-vulnerable.sh
+UmbracoMajor=18 bash build/check-vulnerable.sh
 bash build/gitleaks.sh "origin/main..HEAD"
 
 # Client (Lit + TypeScript + Vite); output goes to ../wwwroot
@@ -63,7 +74,7 @@ cd src/Umbraco.Community.FormsAuditTrail.E2E
 npm ci --ignore-scripts
 npm test
 
-# EF Core: check for model drift on both providers (from src/Umbraco.Community.FormsAuditTrail)
+# EF Core: check for model drift on both providers, on each line (from src/Umbraco.Community.FormsAuditTrail; add -p:UmbracoMajor=17)
 dotnet ef migrations has-pending-model-changes --context SqliteFormsAuditDbContext
 dotnet ef migrations has-pending-model-changes --context SqlServerFormsAuditDbContext
 ```
@@ -84,7 +95,7 @@ All package code is in `src/Umbraco.Community.FormsAuditTrail/`:
 | Access-log policy | `Authorization/`: requirement, handler and group alias check for `EntryAudit:AccessLogUserGroups` |
 | Access API | `Controllers/FormsAuditAccessApiController.cs`, route `/umbraco/formsaudit/api/v1/access`, plus `Services/AccessCsvWriter.cs` |
 | Client | `Client/src/` - dashboards (root, form changes, entry access, entry history), health banner, diff viewer, API service; `Client/public/umbraco-package.json` is the extension manifest |
-| Build scripts | `build/`: `check-vulnerable.*`, `check-trx.py`, `gitleaks.sh`, `check-release-version.sh`, with tests in `build/tests/` |
+| Build scripts | `build/`: `test.sh`, `pack.sh`, `check-vulnerable.*`, `check-trx.py`, `gitleaks.sh`, `check-release-version.sh`, with tests in `build/tests/`; `eng/lines.txt` lists the Umbraco lines |
 | Demo site | `demo/Umbraco.Community.FormsAuditTrail.DemoSite/` |
 
 Tests are in `src/Umbraco.Community.FormsAuditTrail.Tests/`, a sibling folder, because a nested test project would be picked up by the package's compile globs. They use xUnit v2 and NSubstitute; internals are exposed through `InternalsVisibleTo`.
@@ -115,11 +126,12 @@ Tests are in `src/Umbraco.Community.FormsAuditTrail.Tests/`, a sibling folder, b
 
 ## Releasing
 
-1. Check for outdated dependencies, since only security alerts are automated (Dependabot version-update PRs are deliberately off): `npm outdated` in `Client/` and `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --outdated`. Keep Umbraco floors and `Microsoft.EntityFrameworkCore.Design` where they are unless there is a reason to move them.
-2. Open a PR against `main` or `v17`. Branches are protected by rulesets. Day-to-day PRs are squash-merged. The multi-commit milestone PRs for the 18.1.0 and 17.1.0 release are rebase-merged instead, so each milestone's commits land on their own and the `v17` port can cherry-pick them one at a time. The required checks are `build (floor)` and `build (latest)` (.NET build and test at the floor and newest 18.x, client rebuild and `wwwroot` drift), `secrets` (gitleaks), `osv / osv-scan` and `deps` (vulnerable packages). A package or lock file change regenerates `packages.lock.json` with a plain `dotnet restore` at the floor; never commit lock files from a latest-version restore.
-3. After merging, dispatch `release-checks.yml` on the merged commit (Actions, Run workflow, choose `main` or `v17`) and wait for it to pass. It runs the SQL Server and Slow tests, which no other workflow runs, and `publish.yml` refuses to publish a commit that has no successful run of it. Then tag the merged commit `v<version>` (for example `v18.0.1`) and push the tag. `publish.yml` builds, tests, packs with the version taken from the tag, and pushes to NuGet through Trusted Publishing (`NuGet/login`).
-4. Create a GitHub release: `gh release create v<version> --generate-notes`.
-5. GitHub Actions are pinned to full commit SHAs, and `publish.yml` runs in the protected `nuget` environment. Keep both.
-6. The Umbraco Marketplace syncs from NuGet about every 2 hours. `umbraco-marketplace.json` is read from the root of `main`.
+1. Check for outdated dependencies, since only security alerts are automated (Dependabot version-update PRs are deliberately off): `npm outdated` in `Client/` and `dotnet list src/Umbraco.Community.FormsAuditTrail.slnx package --outdated -p:UmbracoMajor=<line>` for each line. Keep Umbraco floors and `Microsoft.EntityFrameworkCore.Design` where they are unless there is a reason to move them.
+2. Bump `PackageMinor`, `PackagePatch` and `PackageVersionSuffix` in `Directory.Build.props` and the pinned 17.x install command in `README.md`. `bash build/check-release-version.sh release/<minor>.<patch>[-suffix]` must exit 0.
+3. Open a PR against `main` (the only branch; protected by a ruleset). PRs are squash-merged. The required checks are `build (17 floor)`, `build (17 latest)`, `build (18 floor)`, `build (18 latest)` (.NET build and test per line at the floor and the newest minor), `client` (client lint, test and rebuild, `wwwroot` drift and the 18 type-check), `secrets` (gitleaks), `osv / osv-scan`, `deps (17)` and `deps (18)` (vulnerable packages per line). A package or lock file change regenerates `packages.<line>.lock.json` with a plain `dotnet restore -p:UmbracoMajor=<line>` at the floor, for both lines; never commit lock files from a latest-version restore.
+4. After merging, dispatch `release-checks.yml` on `main` at the merged commit (Actions, Run workflow) and wait for it to pass. It runs the SQL Server and Slow tests on both lines, which no other workflow runs, and `publish.yml` refuses to publish a commit that has no successful run of it. Then tag the merged commit `release/<minor>.<patch>[-suffix]` and push the tag. `publish.yml` (tag `release/*`, from `main` only) restores, builds, tests and audits both lines, packs one nupkg per line with `build/pack.sh` and pushes them to NuGet through Trusted Publishing (`NuGet/login`).
+5. Create a GitHub release for the tag (`gh release create release/<minor>.<patch> --generate-notes`), naming both versions, and keep it marked Latest.
+6. GitHub Actions are pinned to full commit SHAs, and `publish.yml` runs in the protected `nuget` environment, which accepts only `release/*` tags. Keep both.
+7. The Umbraco Marketplace syncs from NuGet about every 2 hours. `umbraco-marketplace.json` is read from the root of `main`.
 
 NuGet versions can be unlisted but never deleted, so treat a tag push as final.

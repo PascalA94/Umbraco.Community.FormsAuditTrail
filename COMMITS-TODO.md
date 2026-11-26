@@ -162,3 +162,15 @@ Branch `docs/screenshots-refresh`. Run these yourself:
 4. `git log -1`
 
 Then push, open the PR and merge. NuGet picks up the README and marketplace change on the next release.
+
+## Milestone commit: one branch for Umbraco 17 and 18
+
+Branch `chore/single-branch-lines`, off `main` at `9839cdd`. Run these yourself:
+
+1. `git status`. Expect the workflows, build scripts, `Directory.Build.props`, `eng/lines.txt`, the six `packages.<line>.lock.json` (new) and the three deleted `packages.lock.json`, the client version files, the C# section-check changes and tests, and the docs (`CLAUDE.md`, `.github/CONTRIBUTING.md`, `README.md`, `docs/design.md`, `HANDOVER.md`, this file). Check there are no secrets, no `.env` and no `appsettings.*.json` change. If Umbraco has rewritten the demo `appsettings.json` (it adds an `Imaging:HMACSecretKey`), run `git checkout -- demo/Umbraco.Community.FormsAuditTrail.DemoSite/appsettings.json`.
+2. The csproj already has a staged `PackageTags` change (`plugin;package` to `umbracopackage`), carried over from your reset `chore/package-tags` commit. To keep it out of this commit, run `git restore --staged -p src/Umbraco.Community.FormsAuditTrail/Umbraco.Community.FormsAuditTrail.csproj` before step 3, then commit it on its own afterwards.
+3. `git add -A`
+4. `git commit -m "chore: build Umbraco 17 and 18 from one branch" -m "UmbracoMajor (17 or 18) in Directory.Build.props selects the CMS and Forms ranges, the package version and the UMBRACO_17/UMBRACO_18 constant, with per-line lock files and obj/bin folders. The access-log policy repeats each Forms line's own section check. One client bundle, one migration set. A single release/<minor>.<patch> tag packs both lines; v17 is frozen at 17.1.0. See D11 in docs/design.md."`
+5. `git log -1`
+
+Before the first `release/*` tag, change the GitHub settings listed at the top of `HANDOVER.md`: the `nuget` environment tag pattern, the tag ruleset and the required checks.

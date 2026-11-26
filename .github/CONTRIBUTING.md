@@ -4,8 +4,8 @@ Issues and pull requests are welcome. For anything bigger than a small fix, open
 
 ## Branches
 
-- `main` is the Umbraco 18 line (package 18.x). `v17` is the Umbraco 17 line (package 17.x).
-- Open pull requests against `main`. Fixes that apply to both lines are then made on `v17` too. `main` is never merged into `v17`.
+- `main` builds both Umbraco lines: package 18.x for Umbraco 18 and 17.x for Umbraco 17. `-p:UmbracoMajor=17` or `18` (default 18) picks the line. There is no `v17` branch.
+- Open pull requests against `main`. A change must build and pass the tests on both lines. Code for one line only goes behind `#if UMBRACO_17` (18 code in `#else`).
 
 ## Build and test
 
@@ -14,13 +14,17 @@ You need the .NET 10 SDK and Node (the version in `src/Umbraco.Community.FormsAu
 ```bash
 dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode
 dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore
-dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build
+dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --filter "Category!=SqlServer&Category!=Slow"
 
 cd src/Umbraco.Community.FormsAuditTrail/Client
 npm ci --ignore-scripts && npm run build
 ```
 
-The lock files pin Umbraco and Forms at the package's minimum versions. If you change a package reference, run a plain `dotnet restore` and commit the updated `packages.lock.json` files.
+That builds the Umbraco 18 line. Add `-p:UmbracoMajor=17` to the `dotnet` commands for the Umbraco 17 line, or run `bash build/test.sh` to restore, build and test both (`bash build/test.sh 17` for one).
+
+The lock files (`packages.17.lock.json` and `packages.18.lock.json` in each project) pin Umbraco and Forms at each line's minimum versions. If you change a package reference, run a plain `dotnet restore -p:UmbracoMajor=17` and `-p:UmbracoMajor=18`, and commit both lock files.
+
+One client bundle serves both lines: it is built against `@umbraco-cms/backoffice` 17 and CI type-checks it against 18 as well. The client version files stay at `0.0.0`; the pack step stamps the real version.
 
 The built client in `wwwroot/` is committed. Rebuild it when you change anything under `Client/`, and commit the result: CI fails if it drifts.
 
@@ -41,8 +45,12 @@ dotnet ef migrations has-pending-model-changes --context SqlServerFormsAuditDbCo
 cd demo/Umbraco.Community.FormsAuditTrail.DemoSite
 dotnet user-secrets set "Umbraco:CMS:Unattended:UnattendedUserPassword" "<pw>"
 dotnet user-secrets set "Umbraco:CMS:Imaging:HMACSecretKey" "$(openssl rand -base64 64 | tr -d '\n')"
-dotnet run --launch-profile Umbraco.Web.UI
+dotnet run --launch-profile Umbraco.Web.UI                       # Umbraco 18
+dotnet run --launch-profile Umbraco.Web.UI -p:UmbracoMajor=17 \
+  -- --ConnectionStrings:umbracoDbDSN="Data Source=|DataDirectory|/Umbraco17.sqlite.db;Foreign Keys=True;Pooling=True"   # Umbraco 17
 ```
+
+Give each line its own database, as above: an Umbraco 18 database cannot be opened by Umbraco 17.
 
 Without the key, Umbraco generates one on install and writes it into `appsettings.json`. Don't commit that change.
 
@@ -53,7 +61,7 @@ Open https://localhost:44341/umbraco and log in as `admin@example.test`. The aud
 Pack with a unique version each time. NuGet's global cache keeps serving the first build of any version number, so a second pack with the same version is silently ignored:
 
 ```bash
-dotnet pack src/Umbraco.Community.FormsAuditTrail -c Release -o ~/local-nuget -p:Version=0.0.0-local.$(date +%s)
+dotnet pack src/Umbraco.Community.FormsAuditTrail -c Release -o ~/local-nuget -p:Version=0.0.0-local.$(date +%s)   # add -p:UmbracoMajor=17 for an Umbraco 17 site
 dotnet nuget add source ~/local-nuget --name local   # once
 dotnet add package Umbraco.Community.FormsAuditTrail --version 0.0.0-local.<timestamp>
 ```

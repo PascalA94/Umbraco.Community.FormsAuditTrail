@@ -1,15 +1,62 @@
 <Project>
   <!--
-    Lock files describe the floor: they are generated and committed at the default values below, and the floor CI
-    leg restores in locked mode. The latest CI leg overrides all four properties with 18.* and restores unlocked
-    (force-evaluate, RestoreLockedMode=false); the lock files it rewrites are never committed.
-    The defaults match the package's minimum Umbraco and Forms versions, so tests and the demo run at the floor.
+    One codebase, two Umbraco lines. UmbracoMajor selects the line: 18 (default) or 17.
+      dotnet build -p:UmbracoMajor=17
+    It sets the CMS and Forms ranges, the package version, the UMBRACO_17 / UMBRACO_18 constants, and a separate lock
+    file and obj/bin folder per line, so switching lines never reuses the other line's restore.
+
+    Lock files describe the floor: they are generated and committed at the default values of the four Test/Demo version
+    properties below (the line's floor), and the floor CI legs restore in locked mode. The latest-minor CI legs override
+    UmbracoTestVersion, FormsTestVersion, UmbracoDemoVersion, FormsDemoVersion and the package ranges (UmbracoRange,
+    FormsRange) with <line>.* and restore unlocked (force-evaluate, RestoreLockedMode=false); the lock files they
+    rewrite are never committed. Nothing else overrides these properties.
+
+    Floors never go below 17.8.0 / 18.3.0 (CMS) and 17.6.2 / 18.2.2 (Forms): they sit above the October 2026 security
+    rounds. Lowering one needs a security review first.
   -->
   <PropertyGroup>
+    <UmbracoMajor Condition="'$(UmbracoMajor)' == ''">18</UmbracoMajor>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(UmbracoMajor)' == '17'">
+    <UmbracoFloor>17.8.0</UmbracoFloor>
+    <FormsFloor>17.6.2</FormsFloor>
+    <UmbracoNextMajor>18.0.0</UmbracoNextMajor>
+    <DefineConstants>$(DefineConstants);UMBRACO_17</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(UmbracoMajor)' == '18'">
+    <UmbracoFloor>18.3.0</UmbracoFloor>
+    <FormsFloor>18.2.2</FormsFloor>
+    <UmbracoNextMajor>19.0.0</UmbracoNextMajor>
+    <DefineConstants>$(DefineConstants);UMBRACO_18</DefineConstants>
+  </PropertyGroup>
+  <Target Name="ValidateUmbracoMajor" BeforeTargets="Restore;Build;CoreCompile" Condition="'$(UmbracoMajor)' != '17' and '$(UmbracoMajor)' != '18'">
+    <Error Text="UmbracoMajor must be 17 or 18 (got '$(UmbracoMajor)')." />
+  </Target>
+
+  <PropertyGroup>
+    <!-- 17.x and 18.x ship from one tag release/<PackageMinor>.<PackagePatch>[-suffix]; the major comes from the line.
+         An empty suffix is a stable release; set it to alpha.1 for a prerelease. -->
+    <PackageMinor>1</PackageMinor>
+    <PackagePatch>2</PackagePatch>
+    <PackageVersionSuffix></PackageVersionSuffix>
+    <!-- The package's own Umbraco and Forms references, as NuGet ranges. The CI latest leg replaces them with <line>.*,
+         so the package, the tests and the demo all resolve the newest release of the line. -->
+    <UmbracoRange Condition="'$(UmbracoRange)' == ''">[$(UmbracoFloor), $(UmbracoNextMajor))</UmbracoRange>
+    <!-- Forms majors track the CMS major. -->
+    <FormsRange Condition="'$(FormsRange)' == ''">[$(FormsFloor), $(UmbracoNextMajor))</FormsRange>
+    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">$(UmbracoFloor)</UmbracoTestVersion>
+    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">$(FormsFloor)</FormsTestVersion>
+    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">$(UmbracoFloor)</UmbracoDemoVersion>
+    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">$(FormsFloor)</FormsDemoVersion>
+
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <UmbracoTestVersion Condition="'$(UmbracoTestVersion)' == ''">18.3.0</UmbracoTestVersion>
-    <FormsTestVersion Condition="'$(FormsTestVersion)' == ''">18.2.2</FormsTestVersion>
-    <UmbracoDemoVersion Condition="'$(UmbracoDemoVersion)' == ''">18.3.0</UmbracoDemoVersion>
-    <FormsDemoVersion Condition="'$(FormsDemoVersion)' == ''">18.2.2</FormsDemoVersion>
+    <NuGetLockFilePath>$(MSBuildProjectDirectory)/packages.$(UmbracoMajor).lock.json</NuGetLockFilePath>
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/$(UmbracoMajor)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildProjectDirectory)/bin/$(UmbracoMajor)/</BaseOutputPath>
+    <!-- Per-line obj/bin folders: without this the other line's generated .cs files are globbed in (CS0579). -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+    <!-- Audit direct and transitive dependencies; build/check-vulnerable.sh is the PR and release gate. -->
+    <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
 </Project>

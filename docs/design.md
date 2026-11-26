@@ -113,14 +113,14 @@ G1 covers uploaded files served to the backoffice, workflow re-runs and backoffi
   - Forms 18.2.2 (`Umbraco.Forms.Web`) depends on `Umbraco.Cms.Api.Management` and `Umbraco.Cms.Web.Website` `[18.2.0, 19.0.0)`; `Umbraco.Forms.Core` on `Umbraco.Cms.Web.Common` `[18.2.0, 19.0.0)`. CMS 18.3.0 is inside that range.
   - Forms 17.6.2 depends on the same CMS packages at `[17.6.0, 18.0.0)`. CMS 17.8.0 is inside that range.
   - Both pairs restore cleanly in scratch probe projects carrying the package's exact references. Scope: restore only. Runtime behaviour of Forms 17.6.2 on CMS 17.8.0, and of Forms 18.2.2 on CMS 18.3.0, is confirmed by the TestSite boot (plan Task 1) and the contract tests on the CI floor leg, not by this check.
-- .NET 10 on both lines. Two release lines, not multi-targeting (portfolio rule allows this for 02; the Forms and backoffice npm majors differ).
+- .NET 10 on both lines. ~~Two release lines, not multi-targeting (portfolio rule allows this for 02; the Forms and backoffice npm majors differ).~~ Superseded by D11 (2026-11-25): one branch builds both lines.
 - Repo rules from `CLAUDE.md` still apply `[HIGH - source code]`:
-  - never merge `main` into `v17`; cherry-pick;
+  - ~~never merge `main` into `v17`; cherry-pick;~~ (superseded by D11: there is no `v17` branch);
   - a version bump touches four files (csproj, `Client/package.json`, `package-lock.json`, `Client/public/umbraco-package.json`);
   - committed `wwwroot/`, checked by CI;
   - dual-provider EF migrations; `has-pending-model-changes` clean on both.
 - The hooks were verified as identical on 17.6.2 and 18.2.2 `[verified]`, so 17.1.0 has the same scope as 18.1.0. If the 17.6.2 spike finds a gap, ship 17.1.0 without that one event and document it in the v17 README. Don't hold the release and don't split the design. (architect's call)
-- The `v17` branch is not a copy of `main`. Its delete handlers differ (`FormsAuditDbContextExtensions.cs`, different `FormDeletedHandler` shape) `[HIGH - source code, git diff main..origin/v17]`. Expect manual cherry-pick work in the delete path.
+- (Historical, before D11.) The `v17` branch is not a copy of `main`. Its delete handlers differ (`FormsAuditDbContextExtensions.cs`, different `FormDeletedHandler` shape) `[HIGH - source code, git diff main..origin/v17]`. Expect manual cherry-pick work in the delete path.
 
 **Dependency audit (SEC-05, D10)**
 
@@ -164,7 +164,7 @@ G1 covers uploaded files served to the backoffice, workflow re-runs and backoffi
 - **S3:** the dashboard renders user-controlled strings (form names, user names, field captions, edit values). Render as Lit text bindings only, never `unsafeHTML`.
 - **CSV:** reuse `CsvFormatter.Escape` (formula-injection guard) for every cell in the new export. Harden it for a leading carriage return and for a trigger after leading whitespace (SEC-L1); this also hardens the existing definition CSV.
 - Keep the existing anti-enumeration rules: 403 for an inaccessible form's list, 404 for an inaccessible single item.
-- **Supply chain (SEC-13, SEC-I3, SEC-I4):** actions pinned to full commit SHAs; publish runs in a GitHub `environment: nuget` with a required reviewer and only for a tag whose commit is on `main` or `v17`; `v*` tags protected by a ruleset; GitHub secret scanning, push protection and Dependabot security updates on; CodeQL on PRs; `npm audit --audit-level=high` on both branches. The mf-harness `pr-checks.yml` ruleset does not reach this personal repo, so these stand in for it.
+- **Supply chain (SEC-13, SEC-I3, SEC-I4):** actions pinned to full commit SHAs; publish runs in a GitHub `environment: nuget` with a required reviewer and only for a `release/*` tag whose commit is on `main` (D11; `main` or `v17` and `v*` tags before 2026-11-26); `release/*` tags protected by a ruleset; GitHub secret scanning, push protection and Dependabot security updates on; CodeQL on PRs; `npm audit --audit-level=high` on every PR. The mf-harness `pr-checks.yml` ruleset does not reach this personal repo, so these stand in for it.
 - `security-analyst` reviews the new endpoints, the access-log policy, the filter, the upload middleware and the writer before 18.1.0 stable.
 
 **Keep existing installs working**
@@ -197,6 +197,14 @@ Added by Pascal on 2026-10-30 (final):
 |---|---|
 | D9 | Portfolio CMS floors: **`[18.3.0, 19.0.0)`** on `main`, **`[17.8.0, 18.0.0)`** on `v17`. Forms floors unchanged |
 | D10 | `NuGetAuditMode=all`, and pin the vulnerable transitive packages (SEC-05) |
+
+Changed by Pascal on 2026-11-25:
+
+| # | Decision |
+|---|---|
+| D11 | **One branch builds both lines**, replacing "two release lines, not multi-targeting" (section 4). `main` builds 17.x and 18.x, selected by `UmbracoMajor` in `Directory.Build.props` (CMS and Forms ranges, version, `UMBRACO_17` / `UMBRACO_18`, per-line lock files and `obj`/`bin`), as AddressLookup, EmailSender and BackofficeTidy already do. One tag `release/<minor>.<patch>[-suffix]` packs both lines with the same minor and patch; the first is `release/1.3` (17.1.3 and 18.1.3; 17.1.1 and 17.1.2 are skipped). The `v17` branch is frozen at 17.1.0 and no longer receives changes. |
+
+**Why D11.** After 17.1.0 the two branches differed in one real place: the Forms section check in the access-log policy (Forms 17 checks an `allowedapp` claim; Forms 18 has a section requirement and handler). The rest of the diff was version strings, lock files and two shapes of the same delete-handler code, and the client source, the built bundle and the migrations were identical. Keeping two branches meant porting every fix by hand (M6 took a day), with the risk that a fix lands on one line only. One branch with `#if UMBRACO_17` for the one difference, one client bundle (built against `^17.8.0`, type-checked against `^18.3.0` in CI) and one migration set per provider removes the porting and keeps both lines tested on every PR. The floors are unchanged (D9). The 17 line keeps its extra `Umbraco.Cms.Api.Management` reference (GHSA-v5pm-xwqc-g5wc), and the 17 line now runs main's delete-handler shape (same behaviour apart from an empty-string snapshot no longer falling through to the next source, which the query cannot return). The section 4 table, the cherry-pick rules and the section 10 release steps below describe the plan before D11 and are kept as history.
 
 Earlier scope choices that these rest on, not re-opened:
 
@@ -913,7 +921,7 @@ Exit: a one-page note in the repo's PR description (not a new doc) with a yes/no
 3. Rebuild the client per branch; commit `wwwroot/`.
 4. Bump the four version files per branch. Update the pinned `--version 17.x.y` install command in **both** READMEs.
 5. Tag `v18.1.0` / `v17.1.0` → `publish.yml` (Trusted Publishing). `gh release create --generate-notes`.
-   - `publish.yml` (SEC-13): every action pinned to a full commit SHA (Dependabot keeps them current); the job runs in `environment: nuget` with Pascal as required reviewer; the NuGet Trusted Publishing policy is bound to that workflow and environment; a first step fails unless the tag's commit is reachable from `origin/main` or `origin/v17`. A repository ruleset protects `v*` tags. The same SHA pinning applies to `build.yml`.
+   - `publish.yml` (SEC-13): every action pinned to a full commit SHA (Dependabot keeps them current); the job runs in `environment: nuget` with Pascal as required reviewer; the NuGet Trusted Publishing policy is bound to that workflow and environment; a first step fails unless the tag's commit is reachable from `origin/main` (`origin/v17` too before D11). A repository ruleset protects `release/*` tags (`v*` before D11). The same SHA pinning applies to `build.yml`.
 6. The transitive vulnerability audit is a CI step on both matrix legs and both branches, failing on High or Critical (section 4, SEC-05). `build.yml` also runs on pushes to `main` and `v17`; `publish.yml` re-runs the transitive audit and `npm audit` and fails unless `build.yml` passed for the tag's commit (plan review P20). PR checks run in this repo's own CI; it is not enrolled in the organisation ruleset.
 
 **Release checklist for 18.1.0 and 17.1.0 stable** (beta may ship without the starred items)
@@ -923,7 +931,7 @@ Exit: a one-page note in the repo's PR description (not a new doc) with a yes/no
 - [ ] `security-analyst` review of the built filter, upload middleware, writer, policy and API, with each High in `security-review.md` closed or accepted by Pascal as residual risk. *
 - [x] ~~DPO or legal review of the README "GDPR" section and the upgrade notice (SEC-11, escalated).~~ Waived for 18.1.0, see section 4.
 - [ ] README "What is not captured" lists every `NotAudited` surface. README states the log is not tamper-evident, the DB principal needs DDL rights at first start, Users-section access equals admin for this log, and the `DROP` warning.
-- [ ] Repo settings (SEC-I4): secret scanning, push protection and Dependabot security updates on; CodeQL workflow present; `v*` tag ruleset; `nuget` environment with required reviewer.
+- [ ] Repo settings (SEC-I4): secret scanning, push protection and Dependabot security updates on; CodeQL workflow present; `release/*` tag ruleset (was `v*`; changed for D11); `nuget` environment with required reviewer.
 
 **Package metadata (D4)**
 
