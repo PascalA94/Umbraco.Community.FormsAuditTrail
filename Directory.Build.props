@@ -38,7 +38,7 @@
     <!-- 17.x and 18.x ship from one tag release/<PackageMinor>.<PackagePatch>[-suffix]; the major comes from the line.
          An empty suffix is a stable release; set it to alpha.1 for a prerelease. -->
     <PackageMinor>1</PackageMinor>
-    <PackagePatch>2</PackagePatch>
+    <PackagePatch>3</PackagePatch>
     <PackageVersionSuffix></PackageVersionSuffix>
     <!-- The package's own Umbraco and Forms references, as NuGet ranges. The CI latest leg replaces them with <line>.*,
          so the package, the tests and the demo all resolve the newest release of the line. -->

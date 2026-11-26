@@ -106,7 +106,7 @@ The first release, `1.0.0`, targeted Umbraco 17 before this scheme existed. It i
 dotnet add package Umbraco.Community.FormsAuditTrail
 
 # Umbraco 17 - pin a 17.x version, otherwise the latest (18.x) is selected and restore fails
-dotnet add package Umbraco.Community.FormsAuditTrail --version 17.1.0
+dotnet add package Umbraco.Community.FormsAuditTrail --version 17.1.3
 ```
 
 The package registers itself through an `IComposer` and creates its database tables on startup. The dashboard appears as an **Audit** tab in the Forms section of the backoffice. Its first sub-tab, **Form changes**, is the design audit. **Entry access** and **Entry history** are the entry audit, and only users in an access-log group see them.
