@@ -1,26 +1,42 @@
 #!/usr/bin/env bash
-# Release gate: every version file must equal the tag's version, so NuGet never ships a backoffice
-# manifest with a stale version. Usage: build/check-release-version.sh v18.0.4. Run from the repository root.
+# Release gate. One tag packs both Umbraco lines: release/<PackageMinor>.<PackagePatch>[-suffix] (suffix optional), for
+# example release/1.2 gives 17.1.2 and 18.1.2, and release/1.3-alpha.1 gives 17.1.3-alpha.1 and 18.1.3-alpha.1.
+# Fails if Directory.Build.props disagrees with the tag, or if a client version file is not the 0.0.0 placeholder (the
+# pack step stamps the real version into the nupkg's manifest, so git never carries one).
+# Usage: build/check-release-version.sh release/1.2. Run from the repository root.
 set -euo pipefail
 
-tag="${1:?usage: check-release-version.sh <tag>}"
-want="${tag#v}"
+tag="${1:?usage: check-release-version.sh <release/minor.patch[-suffix]>}"
 pkg="src/Umbraco.Community.FormsAuditTrail"
 status=0
+sfx='(-[0-9A-Za-z][0-9A-Za-z.-]*)?'
 
-check() {
-  local file="$1" got="$2"
-  if [ "$got" != "$want" ]; then
-    echo "check-release-version: $file has '$got', tag wants '$want'" >&2
+if ! [[ "$tag" =~ ^release/[0-9]+\.[0-9]+${sfx}$ ]]; then
+  echo "check-release-version: unexpected tag '$tag'" >&2
+  exit 1
+fi
+want="${tag#release/}"
+
+prop() { sed -n "s:.*<$1>\(.*\)</$1>.*:\1:p" Directory.Build.props | head -1; }
+minor="$(prop PackageMinor)"; patch="$(prop PackagePatch)"; suffix="$(prop PackageVersionSuffix)"
+have="$minor.$patch${suffix:+-$suffix}"
+if [ "$have" != "$want" ]; then
+  echo "check-release-version: Directory.Build.props has '$have', tag wants '$want'" >&2
+  status=1
+fi
+
+for f in "$pkg/Client/package.json" "$pkg/Client/public/umbraco-package.json" "$pkg/wwwroot/umbraco-package.json" "$pkg/Client/package-lock.json"; do
+  got="$(node -p "require('./$f').version")"
+  if [ "$got" != "0.0.0" ]; then
+    echo "check-release-version: $f has '$got', expected the 0.0.0 placeholder" >&2
     status=1
   fi
-}
-
-check "$pkg/Umbraco.Community.FormsAuditTrail.csproj" "$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$pkg/Umbraco.Community.FormsAuditTrail.csproj" | head -1)"
-for f in "$pkg/Client/package.json" "$pkg/Client/public/umbraco-package.json" "$pkg/wwwroot/umbraco-package.json"; do
-  check "$f" "$(node -p "require('./$f').version")"
 done
-check "$pkg/Client/package-lock.json" "$(node -p "require('./$pkg/Client/package-lock.json').version")"
-check "$pkg/Client/package-lock.json (root package)" "$(node -p "require('./$pkg/Client/package-lock.json').packages[''].version")"
+got="$(node -p "require('./$pkg/Client/package-lock.json').packages[''].version")"
+if [ "$got" != "0.0.0" ]; then
+  echo "check-release-version: $pkg/Client/package-lock.json (root package) has '$got', expected the 0.0.0 placeholder" >&2
+  status=1
+fi
 
+[ "$status" -ne 0 ] || echo "check-release-version: $want"
 exit $status

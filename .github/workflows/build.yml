@@ -1,10 +1,12 @@
 name: Build and Test
 
+# One branch builds both Umbraco lines (17 and 18), selected by the UmbracoMajor environment variable (MSBuild reads
+# environment variables as properties; see Directory.Build.props).
 on:
   pull_request:
-    branches: [main, v17]
+    branches: [main]
   push:
-    branches: [main, v17]
+    branches: [main]
 
 permissions:
   contents: read
@@ -14,30 +16,18 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   CLIENT_DIR: src/Umbraco.Community.FormsAuditTrail/Client
   PKG_DIR: src/Umbraco.Community.FormsAuditTrail
-  # The latest leg lifts every Umbraco and Forms reference to the newest 18.x; see Directory.Build.props.
-  LATEST_PROPS: '"-p:UmbracoTestVersion=18.*" "-p:FormsTestVersion=18.*" "-p:UmbracoDemoVersion=18.*" "-p:FormsDemoVersion=18.*"'
+  SLN: src/Umbraco.Community.FormsAuditTrail.slnx
 
 jobs:
-  build:
+  # The client is one bundle for both lines (built against @umbraco-cms/backoffice ^17.8.0, the lower line), so it is
+  # built, linted, tested and checked once here. The build jobs below embed the committed wwwroot; this job proves it
+  # is fresh.
+  client:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # floor: locked restore at the committed lock files, so the package is tested at its declared minimums.
-        # latest: newest 18.x of Umbraco and Forms, restored unlocked; the lock files it rewrites are never committed.
-        leg: [floor, latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.x'
-          # NuGet cache keyed on the lock files. Not used in publish.yml, so a release never restores from a PR-filled cache.
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
 
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -87,29 +77,76 @@ jobs:
             grep -rqE --include='*.js' "[\"']@umbraco-cms/backoffice/" src/Umbraco.Community.FormsAuditTrail/wwwroot/
           fi
 
+      # One bundle serves both lines (built against ^17.8.0). Type-check the source against the 18 line too, in a temp
+      # copy, so an 18-only break shows on the PR.
+      - name: Type-check against @umbraco-cms/backoffice 18
+        run: |
+          tmp="$(mktemp -d)"
+          cp -R "$CLIENT_DIR/." "$tmp/"
+          cd "$tmp"
+          rm -rf node_modules
+          npm ci --ignore-scripts
+          npm i --no-save --ignore-scripts "@umbraco-cms/backoffice@^18.3.0"
+          npx tsc --noEmit
+
+  build:
+    name: build (${{ matrix.line }} ${{ matrix.leg }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['17', '18']
+        # floor: locked restore at the committed packages.<line>.lock.json, so the package is tested at its declared minimums.
+        # latest: newest <line>.x of Umbraco and Forms, restored unlocked; the lock files it rewrites are never committed.
+        leg: [floor, latest]
+    # MSBuild reads environment variables as properties: UmbracoMajor picks the line, and the latest leg floats the package
+    # ranges and the test and demo versions to <line>.*. Empty values fall through to the Directory.Build.props defaults
+    # (the floor). Being environment variables, they also reach dotnet ef and every other step without repeating them.
+    env:
+      UmbracoMajor: ${{ matrix.line }}
+      UmbracoRange: ${{ matrix.leg == 'latest' && format('{0}.*', matrix.line) || '' }}
+      FormsRange: ${{ matrix.leg == 'latest' && format('{0}.*', matrix.line) || '' }}
+      UmbracoTestVersion: ${{ matrix.leg == 'latest' && format('{0}.*', matrix.line) || '' }}
+      FormsTestVersion: ${{ matrix.leg == 'latest' && format('{0}.*', matrix.line) || '' }}
+      UmbracoDemoVersion: ${{ matrix.leg == 'latest' && format('{0}.*', matrix.line) || '' }}
+      FormsDemoVersion: ${{ matrix.leg == 'latest' && format('{0}.*', matrix.line) || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.x'
+          # NuGet cache keyed on the lock files. Not used in publish.yml, so a release never restores from a PR-filled cache.
+          cache: true
+          cache-dependency-path: '**/packages.*.lock.json'
+
       - name: Restore (locked)
         if: matrix.leg == 'floor'
         # NU1903 and NU1904 are High and Critical advisories; the csproj keeps them as warnings so a local build is not
         # blocked by an advisory published overnight, but CI must not pass with one.
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
+        run: dotnet restore "$SLN" --locked-mode -warnaserror:NU1903,NU1904
 
       - name: Lock files unchanged
         if: matrix.leg == 'floor'
-        run: git diff --exit-code -- '**/packages.lock.json'
+        run: git diff --exit-code -- '**/packages.*.lock.json'
 
-      - name: Restore (latest 18.x, unlocked)
+      - name: Restore (latest minor, unlocked)
         if: matrix.leg == 'latest'
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx ${{ env.LATEST_PROPS }} --force-evaluate -p:RestoreLockedMode=false -warnaserror:NU1903,NU1904
+        run: dotnet restore "$SLN" --force-evaluate -p:RestoreLockedMode=false -warnaserror:NU1903,NU1904
 
-      # dotnet list reads the assets file the restore just wrote, so on the latest leg this audits the newest 18.x
+      # dotnet list reads the assets file the restore just wrote, so on the latest leg this audits the newest <line>.x
       # graph, not the floor. Any severity fails (R19).
       - name: Vulnerable packages (direct and transitive)
         run: bash build/check-vulnerable.sh
 
       - name: Build
-        run: dotnet build src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-restore ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
+        run: dotnet build "$SLN" -c Release --no-restore
 
       # A model change without a migration for both providers fails here (repo rule: dual-provider migrations).
+      # --no-build finds this line's output (bin/<line>/Release) because UmbracoMajor is in the job environment.
       - name: Restore local tools
         run: dotnet tool restore
 
@@ -123,13 +160,13 @@ jobs:
 
       # SQL Server tests run only in release-checks.yml (R21), so a pull request never needs a database server.
       - name: Test
-        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx -c Release --no-build --filter "Category!=SqlServer&Category!=Slow" --logger "trx;LogFileName=results.trx" ${{ matrix.leg == 'latest' && env.LATEST_PROPS || '' }}
+        run: dotnet test "$SLN" -c Release --no-build --filter "Category!=SqlServer&Category!=Slow" --logger "trx;LogFileName=results.trx"
 
       - name: Upload test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: test-results-${{ matrix.leg }}
+          name: test-results-${{ matrix.line }}-${{ matrix.leg }}
           path: '**/results.trx'
 
   secrets:
@@ -156,12 +193,25 @@ jobs:
       upload-sarif: false
       scan-args: |-
         --config=./osv-scanner.toml
+        --lockfile=packages.lock.json:./src/Umbraco.Community.FormsAuditTrail/packages.17.lock.json
+        --lockfile=packages.lock.json:./src/Umbraco.Community.FormsAuditTrail/packages.18.lock.json
+        --lockfile=packages.lock.json:./src/Umbraco.Community.FormsAuditTrail.Tests/packages.17.lock.json
+        --lockfile=packages.lock.json:./src/Umbraco.Community.FormsAuditTrail.Tests/packages.18.lock.json
+        --lockfile=packages.lock.json:./demo/Umbraco.Community.FormsAuditTrail.DemoSite/packages.17.lock.json
+        --lockfile=packages.lock.json:./demo/Umbraco.Community.FormsAuditTrail.DemoSite/packages.18.lock.json
         --recursive
         ./
 
   deps:
+    name: deps (${{ matrix.line }})
     needs: osv
     runs-on: ubuntu-latest
+    env:
+      UmbracoMajor: ${{ matrix.line }}
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['17', '18']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,9 +222,9 @@ jobs:
           dotnet-version: '10.x'
           # NuGet cache keyed on the lock files. Not used in publish.yml, so a release never restores from a PR-filled cache.
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: '**/packages.*.lock.json'
       - name: Restore (locked)
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
+        run: dotnet restore "$SLN" --locked-mode -warnaserror:NU1903,NU1904
       - name: Vulnerable packages (direct and transitive)
         run: bash build/check-vulnerable.sh
 

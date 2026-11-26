@@ -1,6 +1,7 @@
 name: Release checks
 
 # Manual only. Pull requests never start a database server (R21); run this before tagging a release.
+# Both Umbraco lines run, each at its floor (locked restore).
 on:
   workflow_dispatch:
 
@@ -13,8 +14,16 @@ env:
 
 jobs:
   sqlserver:
+    name: sqlserver (${{ matrix.line }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['17', '18']
+    # MSBuild reads environment variables as properties: this picks the Umbraco line (Directory.Build.props).
+    env:
+      UmbracoMajor: ${{ matrix.line }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,7 +35,7 @@ jobs:
           dotnet-version: '10.x'
           # NuGet cache keyed on the lock files, as in build.yml. Not used in publish.yml.
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: '**/packages.*.lock.json'
 
       - name: Restore (locked)
         run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
@@ -74,13 +83,20 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: test-results-sqlserver
+          name: test-results-sqlserver-${{ matrix.line }}
           path: ${{ runner.temp }}/trx/sqlserver.trx
 
   # The 500,000-row streaming test is too slow for every pull request, so it runs here on purpose before a release.
   slow:
+    name: slow (${{ matrix.line }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['17', '18']
+    env:
+      UmbracoMajor: ${{ matrix.line }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -91,7 +107,7 @@ jobs:
         with:
           dotnet-version: '10.x'
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: '**/packages.*.lock.json'
 
       - name: Restore (locked)
         run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
@@ -111,5 +127,5 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: test-results-slow
+          name: test-results-slow-${{ matrix.line }}
           path: ${{ runner.temp }}/trx/slow.trx

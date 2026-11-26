@@ -1,6 +1,6 @@
 {
   "name": "umbraco-community-forms-audit-trail-client",
-  "version": "18.1.2",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "lint": "eslint src"
   },
   "devDependencies": {
-    "@umbraco-cms/backoffice": "^18.3.0",
+    "@umbraco-cms/backoffice": "^17.8.0",
     "eslint": "10.14.0",
     "typescript": "^5.9.0",
     "typescript-eslint": "8.72.2",

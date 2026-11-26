@@ -38,3 +38,6 @@ src/Umbraco.Community.FormsAuditTrail.E2E/.env
 # Python bytecode and agent scratch
 __pycache__/
 .superpowers/
+
+# Local pack output (build/pack.sh)
+artifacts/

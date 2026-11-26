@@ -25,7 +25,9 @@ using Umbraco.Community.FormsAuditTrail.Persistence;
 using Umbraco.Forms.Core.Data.Storage;
 using Umbraco.Forms.Core.Security;
 using Umbraco.Forms.Core.Services;
+#if !UMBRACO_17
 using Umbraco.Forms.Web.Authorization.SectionAccess;
+#endif
 using Xunit;
 
 namespace Umbraco.Community.FormsAuditTrail.Tests;
@@ -35,7 +37,8 @@ namespace Umbraco.Community.FormsAuditTrail.Tests;
 /// Management API endpoints answer, not a 302 to the login page. The host registers both backoffice schemes under their
 /// real names: the token scheme Forms and the Management API authenticate with (here a stand-in that authenticates from
 /// a header and forbids with 403, as OpenIddict validation does) and the backoffice cookie, whose forbid redirects. The
-/// controller sits behind Forms' SectionAccessForms as Forms builds it (scheme, Forms' real section handler) and the
+/// controller sits behind Forms' SectionAccessForms as each Forms line builds it (18: scheme and Forms' real section
+/// handler; 17: scheme and the allowedapp claim) and the
 /// package's real access-log policy, so a redirect here means the policy named a scheme whose forbid redirects.
 /// </summary>
 public sealed class AccessLogPolicyForbidTests : IAsyncLifetime
@@ -43,11 +46,21 @@ public sealed class AccessLogPolicyForbidTests : IAsyncLifetime
     // OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, as Forms and Umbraco add it to their policies.
     private const string TokenScheme = "OpenIddict.Validation.AspNetCore";
     private const string UserHeader = "X-Test-User";
+    // The claim Forms 17's SectionAccessForms requires; Umbraco puts one on the token per allowed section. Issued on both
+    // lines: Forms 18's section handler ignores it.
+    private const string AllowedAppClaim = "http://umbraco.org/2015/02/identity/claims/backoffice/allowedapp";
     private const string LoginPath = "/umbraco/login";
 
     private static readonly Guid AdminKey = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid EditorKey = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid WriterKey = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+    private static readonly Dictionary<Guid, string[]> SectionsByUser = new()
+    {
+        [AdminKey] = ["content", "forms"],
+        [EditorKey] = ["content", "forms"],
+        [WriterKey] = ["content"],
+    };
 
     private readonly TestDatabase _db = new();
     private readonly IUserService _users = Substitute.For<IUserService>();
@@ -60,9 +73,9 @@ public sealed class AccessLogPolicyForbidTests : IAsyncLifetime
         // Built before Returns: NSubstitute cannot configure one substitute inside another's Returns call.
         var byKey = new Dictionary<Guid, IUser>
         {
-            [AdminKey] = User("admin", ["content", "forms"]),
-            [EditorKey] = User("editor", ["content", "forms"]),
-            [WriterKey] = User("writer", ["content"]),
+            [AdminKey] = User("admin", SectionsByUser[AdminKey]),
+            [EditorKey] = User("editor", SectionsByUser[EditorKey]),
+            [WriterKey] = User("writer", SectionsByUser[WriterKey]),
         };
         foreach ((Guid key, IUser user) in byKey)
         {
@@ -100,12 +113,18 @@ public sealed class AccessLogPolicyForbidTests : IAsyncLifetime
                         o.AddPolicy("SectionAccessForms", p =>
                         {
                             p.AuthenticationSchemes.Add(TokenScheme);
+#if UMBRACO_17
+                            p.RequireClaim(AllowedAppClaim, "forms");
+#else
                             p.Requirements.Add(new SectionAccessRequirement("forms"));
+#endif
                         });
                         o.AddPolicy(AccessLogPolicy.Name, AccessLogPolicy.Configure);
                     });
                     services.AddSingleton(_authorizationHelper);
+#if !UMBRACO_17
                     services.AddSingleton<IAuthorizationHandler, SectionAccessHandler>();
+#endif
 
                     var options = new FormsAuditTrailOptions();
                     new FormsAuditTrailOptionsSetup(NullLogger<FormsAuditTrailOptionsSetup>.Instance).PostConfigure(null, options);
@@ -225,7 +244,13 @@ public sealed class AccessLogPolicyForbidTests : IAsyncLifetime
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
-            var identity = new ClaimsIdentity([new Claim("sub", value.ToString())], TokenScheme);
+            var claims = new List<Claim> { new("sub", value.ToString()) };
+            if (Guid.TryParse(value.ToString(), out Guid key) && SectionsByUser.TryGetValue(key, out string[]? sections))
+            {
+                claims.AddRange(sections.Select(section => new Claim(AllowedAppClaim, section)));
+            }
+
+            var identity = new ClaimsIdentity(claims, TokenScheme);
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), TokenScheme)));
         }
     }

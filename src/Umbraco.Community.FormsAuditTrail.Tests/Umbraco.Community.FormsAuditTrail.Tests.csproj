@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <!-- The package declares Umbraco and Forms as ranges and resolves to their floors. These direct references keep the
-       tests at the floor by default and let the CI latest leg lift them to the newest 18.x (Directory.Build.props). -->
+       tests at the floor by default and let the CI latest leg lift them to the newest release of the line (Directory.Build.props). -->
   <ItemGroup>
     <PackageReference Include="Umbraco.Cms.Web.Common" Version="$(UmbracoTestVersion)" />
     <PackageReference Include="Umbraco.Cms.Persistence.EFCore.Sqlite" Version="$(UmbracoTestVersion)" />

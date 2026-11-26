@@ -3,10 +3,15 @@ name: Publish to NuGet
 on:
   push:
     tags:
-      - 'v*'
+      - 'release/*'
 
 permissions:
   contents: read
+
+# Two tags pushed close together must not publish at the same time; a running publish is never cancelled half way.
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   # All third-party build and test code (npm, vite, NuGet) runs here with read-only permissions, so none of it can
@@ -23,15 +28,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      # A tag publishes only from its line's release branch: v18.* from main, v17.* from v17.
-      - name: Tag is on its release branch
-        run: |
-          case "$GITHUB_REF_NAME" in
-            v18.*) branch=main ;;
-            v17.*) branch=v17 ;;
-            *) echo "Unexpected tag $GITHUB_REF_NAME" >&2; exit 1 ;;
-          esac
-          git merge-base --is-ancestor "$GITHUB_SHA" "origin/$branch"
+      # One branch carries both lines, so a tag publishes only from main.
+      - name: Tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
       - name: Version files match the tag
         run: bash build/check-release-version.sh "$GITHUB_REF_NAME"
@@ -58,22 +57,24 @@ jobs:
         with:
           dotnet-version: '10.x'
 
-      - name: Restore (locked)
-        run: dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx --locked-mode -warnaserror:NU1903,NU1904
+      # Both lines are restored (locked), built, tested and checked for known advisories before anything is packed.
+      # UmbracoMajor is passed as a property for the dotnet steps and as an environment variable for check-vulnerable.sh,
+      # which reads the line's assets file.
+      - name: Build, test and audit both lines
+        run: |
+          while read -r line; do
+            [ -n "$line" ] || continue
+            echo "== Umbraco $line"
+            dotnet restore src/Umbraco.Community.FormsAuditTrail.slnx "-p:UmbracoMajor=$line" --locked-mode -warnaserror:NU1903,NU1904
+            dotnet build src/Umbraco.Community.FormsAuditTrail.slnx --no-restore -c Release "-p:UmbracoMajor=$line"
+            # SQL Server and Slow tests run only in release-checks.yml, which the gate below requires; here CI=true would
+            # make the SQL Server tests fail for want of a server.
+            dotnet test src/Umbraco.Community.FormsAuditTrail.slnx --no-build -c Release "-p:UmbracoMajor=$line" --filter "Category!=SqlServer&Category!=Slow"
+            # Parsed output, never the exit code.
+            UmbracoMajor="$line" bash build/check-vulnerable.sh
+          done < eng/lines.txt
 
-      - name: Build
-        run: dotnet build src/Umbraco.Community.FormsAuditTrail.slnx --no-restore -c Release
-
-      # SQL Server and Slow tests run only in release-checks.yml, which the gate below requires; here CI=true would make
-      # the SQL Server tests fail for want of a server.
-      - name: Test
-        run: dotnet test src/Umbraco.Community.FormsAuditTrail.slnx --no-build -c Release --filter "Category!=SqlServer&Category!=Slow"
-
-      # Parsed output, never the exit code.
-      - name: Vulnerable packages
-        run: bash build/check-vulnerable.sh
-
-      # build.yml runs on every push to main and v17, so the tagged commit must already have a green run. The
+      # build.yml runs on every push to main, so the tagged commit must already have a green run. The
       # workflow-runs API is scoped to build.yml itself, so a check run of the same name from another workflow or a
       # GitHub App cannot satisfy it. A matrix failure makes the whole run's conclusion non-success.
       - name: build.yml passed for this commit
@@ -91,27 +92,31 @@ jobs:
 
       # release-checks.yml runs the SQL Server tests and is dispatched by hand on the merged commit before tagging.
       # Same scoping as above: the API is queried for that workflow file only. The run must also have been dispatched on
-      # main or v17: a tag does not say which branch its commit sits on, so either release branch is accepted, and a
-      # run dispatched from a feature branch cannot satisfy the gate.
+      # main, so a run dispatched from a feature branch cannot satisfy the gate.
       - name: release-checks.yml passed for this commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           count="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/release-checks.yml/runs" \
             -f head_sha="$GITHUB_SHA" -f event=workflow_dispatch -f status=completed \
-            --jq '[.workflow_runs[] | select(.conclusion == "success" and (.head_branch == "main" or .head_branch == "v17"))] | length')"
+            --jq '[.workflow_runs[] | select(.conclusion == "success" and .head_branch == "main")] | length')"
           echo "Successful release-checks.yml runs for $GITHUB_SHA: $count"
           if [ "$count" -lt 1 ]; then
             echo "release-checks.yml has no successful dispatched run for $GITHUB_SHA; dispatch it on this commit before tagging" >&2
             exit 1
           fi
 
-      # Only the package is packed: tests and the demo site are IsPackable=false.
+      # One nupkg per line (17.x and 18.x), each carrying wwwroot. Only the package is packed: tests and the demo site
+      # are IsPackable=false. pack.sh restores (locked), builds and packs each line, stamps the line's version into the
+      # backoffice manifest, and fails unless the package holds staticwebassets/index.js and no lock file.
       - name: Pack
+        run: bash build/pack.sh ./artifacts
+
+      - name: One package per line
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          dotnet pack src/Umbraco.Community.FormsAuditTrail/Umbraco.Community.FormsAuditTrail.csproj \
-            --no-build -c Release "-p:Version=$VERSION" -o ./artifacts
+          shopt -s nullglob
+          packs=(./artifacts/*.nupkg)
+          [ "${#packs[@]}" -eq 2 ] || { echo "expected 2 nupkgs, found ${#packs[@]}" >&2; exit 1; }
 
       - name: Upload packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
